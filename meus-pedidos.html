@@ -30,7 +30,7 @@
 
 <div class="container">
     <div class="header-nav">
-        <a href="index.html" class="btn-voltar">← Novo Pedido</a>
+        <a href="index.html" class="btn-voltar">← Voltar para Home</a>
         <h2>Minhas Demandas</h2>
         <span id="user-email" style="font-size: 12px; color: #888;"></span>
     </div>
@@ -45,16 +45,21 @@
 <script>
     const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_guT8FKUn87-uqtFWkIBGjA_3pfXwsZN";
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    // Inicialização única e correta do cliente do Supabase
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     let currentBuyerId = null;
 
     async function verificarSessao() {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
+        const { data: { session }, error } = await supabaseClient.auth.getSession();
+        
+        if (error || !session) {
+            alert("Sua sessão expirou ou você não está logado.");
             window.location.href = "login.html";
             return;
         }
+        
         currentBuyerId = session.user.id;
         document.getElementById('user-email').innerText = session.user.email;
         carregarMeusPedidos();
@@ -62,8 +67,8 @@
 
     async function carregarMeusPedidos() {
         try {
-            // Busca os pedidos do comprador logado e traz junto as ofertas de cada um (Join)
-            const { data: pedidos, error } = await supabase
+            // Busca os pedidos do comprador logado trazendo as ofertas acopladas (Join)
+            const { data: pedidos, error } = await supabaseClient
                 .from('purchase_requests')
                 .select('*, seller_offers(*)')
                 .eq('buyer_id', currentBuyerId)
@@ -75,7 +80,7 @@
             container.innerHTML = '';
 
             if (pedidos.length === 0) {
-                container.innerHTML = '<p class="loading">Você ainda não publicou nenhum pedido.</p>';
+                container.innerHTML = '<p class="loading">Você ainda não enviou nenhum pedido de compra.</p>';
                 return;
             }
 
@@ -83,20 +88,16 @@
                 const divPedido = document.createElement('div');
                 divPedido.className = 'pedido-card';
                 
-                // Cabeçalho do pedido
                 let html = `
-                    <h3 class="pedido-title">${pedido.title} <span class="badge-count">${pedido.seller_offers.length} ofertas</span></h3>
+                    <h3 class="pedido-title">${pedido.title} <span class="badge-count">${pedido.seller_offers ? pedido.seller_offers.length : 0} ofertas</span></h3>
                     <p class="pedido-desc">${pedido.description}</p>
                     <div class="ofertas-container">
                 `;
 
-                // Verifica se há ofertas
-                if (pedido.seller_offers.length === 0) {
+                if (!pedido.seller_offers || pedido.seller_offers.length === 0) {
                     html += `<p class="no-offers">Aguardando propostas de vendedores...</p>`;
                 } else {
-                    // Lista cada oferta recebida
                     pedido.seller_offers.forEach(oferta => {
-                        // Pega a primeira imagem do array (ou uma placeholder se vazio)
                         const imgUrl = (oferta.images_urls && oferta.images_urls.length > 0) 
                                        ? oferta.images_urls[0] 
                                        : 'https://via.placeholder.com/150?text=Sem+Foto';
@@ -122,8 +123,8 @@
             });
 
         } catch (error) {
-            console.error('Erro:', error.message);
-            document.getElementById('lista-pedidos').innerHTML = '<p class="loading">Erro ao carregar seus dados.</p>';
+            console.error('Erro na requisição:', error.message);
+            document.getElementById('lista-pedidos').innerHTML = '<p class="loading">Erro ao carregar seus dados no banco.</p>';
         }
     }
 
