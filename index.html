@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Querocomprar.com - Solicitar Produto</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 20px; }
+        .container { max-width: 500px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"], textarea, input[type="number"] { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        button { background-color: #3483fa; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px; width: 100%; font-size: 16px; }
+        button:hover { background-color: #2968c8; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>O que você deseja comprar?</h2>
+    <p>Preencha os detalhes e os vendedores enviarão propostas para você.</p>
+    
+    <form id="purchaseForm">
+        <div class="form-group">
+            <label for="title">Produto que procura:</label>
+            <input type="text" id="title" placeholder="Ex: iPhone 13 Pro Max Usado" required>
+        </div>
+
+        <div class="form-group">
+            <label for="description">Especificações / Detalhes:</label>
+            <textarea id="description" rows="4" placeholder="Ex: Preciso que tenha bateria acima de 85% e sem riscos na tela." required></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="budget">Quanto pretende pagar até (R$):</label>
+            <input type="number" id="budget" placeholder="Ex: 3500">
+        </div>
+
+        <button type="submit">Publicar Pedido</button>
+    </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+    // 2. Configuração das credenciais fornecidas
+    const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_guT8FKUn87-uqtFWkIBGjA_3pfXwsZN"; // Chave pública fornecida
+
+    // Inicializa o cliente Supabase
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // 3. Captura do envio do formulário
+    document.getElementById('purchaseForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const title = document.getElementById('title').value;
+        const description = document.getElementById('description').value;
+        const budget = document.getElementById('budget').value;
+
+        // ID temporário simulando o usuário logado (enquanto não criamos a tela de login)
+        // OBS: Para testar sem RLS estrito, certifique-se de que a tabela aceita inserts ou use um UUID válido.
+        const mockBuyerId = "00000000-0000-0000-0000-000000000000"; 
+
+        try {
+            // Envia os dados para a tabela 'purchase_requests' que modelamos anteriormente
+            const { data, error } = await supabase
+                .from('purchase_requests')
+                .insert([
+                    { 
+                        buyer_id: mockBuyerId, 
+                        title: title, 
+                        description: description, 
+                        budget_max: budget ? parseFloat(budget) : null 
+                    }
+                ]);
+
+            if (error) throw error;
+
+            alert('Pedido publicado com sucesso! Agora é só aguardar as propostas dos vendedores.');
+            document.getElementById('purchaseForm').reset();
+
+        } catch (error) {
+            console.error('Erro ao publicar:', error.message);
+            alert('Erro ao publicar pedido: ' + error.message);
+        }
+    });
+</script>
+
+</body>
+</html>
