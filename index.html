@@ -6,15 +6,25 @@
     <title>Querocomprar.com - Solicitar Produto</title>
     <style>
         body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 20px; }
-        .container { max-width: 500px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .container { max-width: 500px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin: 0 auto; }
         .form-group { margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; font-weight: bold; }
         input[type="text"], textarea, input[type="number"] { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-        button { background-color: #3483fa; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px; width: 100%; font-size: 16px; }
+        button { background-color: #3483fa; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px; width: 100%; font-size: 16px; font-weight: bold; }
         button:hover { background-color: #2968c8; }
+        .nav-container { max-width: 500px; margin: 0 auto 20px auto; display: flex; justify-content: space-between; align-items: center; }
+        .btn-logout { background-color: #e74c3c; color: white; border: none; padding: 6px 12px; cursor: pointer; border-radius: 4px; font-size: 14px; }
+        .btn-logout:hover { background-color: #c0392b; }
+        .link-pedidos { color: #3483fa; text-decoration: none; font-weight: bold; font-size: 14px; }
+        .link-pedidos:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
+
+<div class="nav-container">
+    <a href="meus-pedidos.html" class="link-pedidos">📋 Ver Meus Pedidos</a>
+    <button class="btn-logout" id="btnLogout">Sair</button>
+</div>
 
 <div class="container">
     <h2>O que você deseja comprar?</h2>
@@ -36,39 +46,54 @@
             <input type="number" id="budget" placeholder="Ex: 3500">
         </div>
 
-        <button type="submit">Publicar Pedido</button>
+        <button type="submit" id="btnSubmit">Publicar Pedido</button>
     </form>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-    // 2. Configuração das credenciais fornecidas
+    // Configuração das credenciais do Querocomprar.com
     const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_guT8FKUn87-uqtFWkIBGjA_3pfXwsZN"; // Chave pública fornecida
-
-    // Inicializa o cliente Supabase
+    const SUPABASE_ANON_KEY = "sb_publishable_guT8FKUn87-uqtFWkIBGjA_3pfXwsZN";
     const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // 3. Captura do envio do formulário
+    // Variável global para reter o ID do comprador logado
+    let currentBuyerId = null;
+
+    // 1. VERIFICAÇÃO DE SESSÃO ATIVA
+    async function verificarSessao() {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+            alert("Você precisa estar logado para publicar um pedido.");
+            window.location.href = "login.html";
+            return;
+        }
+        
+        // Atribui o ID real do usuário autenticado
+        currentBuyerId = session.user.id;
+    }
+
+    // 2. CAPTURA DO ENVIO DO FORMULÁRIO
     document.getElementById('purchaseForm').addEventListener('submit', async (e) => {
         e.preventDefault();
+
+        const btnSubmit = document.getElementById('btnSubmit');
+        btnSubmit.innerText = "Publicando...";
+        btnSubmit.disabled = true;
 
         const title = document.getElementById('title').value;
         const description = document.getElementById('description').value;
         const budget = document.getElementById('budget').value;
 
-        // ID temporário simulando o usuário logado (enquanto não criamos a tela de login)
-        // OBS: Para testar sem RLS estrito, certifique-se de que a tabela aceita inserts ou use um UUID válido.
-        const mockBuyerId = "00000000-0000-0000-0000-000000000000"; 
-
         try {
-            // Envia os dados para a tabela 'purchase_requests' que modelamos anteriormente
+            // Envia os dados associando com o ID real do comprador obtido na sessão
             const { data, error } = await supabase
                 .from('purchase_requests')
                 .insert([
                     { 
-                        buyer_id: mockBuyerId, 
+                        buyer_id: currentBuyerId, 
                         title: title, 
                         description: description, 
                         budget_max: budget ? parseFloat(budget) : null 
@@ -77,14 +102,33 @@
 
             if (error) throw error;
 
-            alert('Pedido publicado com sucesso! Agora é só aguardar as propostas dos vendedores.');
+            alert('Pedido publicado com sucesso! Agora os vendedores já podem te enviar propostas.');
             document.getElementById('purchaseForm').reset();
+            
+            // Opcional: Redireciona o comprador para ver a lista de pedidos dele
+            window.location.href = "meus-pedidos.html";
 
         } catch (error) {
             console.error('Erro ao publicar:', error.message);
             alert('Erro ao publicar pedido: ' + error.message);
+        } finally {
+            btnSubmit.innerText = "Publicar Pedido";
+            btnSubmit.disabled = false;
         }
     });
+
+    // 3. FUNÇÃO PARA DESLOGAR (LOGOUT)
+    document.getElementById('btnLogout').addEventListener('click', async () => {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+            alert("Erro ao sair: " + error.message);
+        } else {
+            window.location.href = "login.html";
+        }
+    });
+
+    // Executa a validação assim que carregar a página
+    window.onload = verificarSessao;
 </script>
 
 </body>
