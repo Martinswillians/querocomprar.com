@@ -3,34 +3,107 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Querocomprar.com - Meus Pedidos e Ofertas</title>
+    <title>Querocomprar.com - Meus Pedidos</title>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 20px; }
-        .container { max-width: 900px; margin: 0 auto; }
-        .header-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
-        .btn-voltar { text-decoration: none; color: #3483fa; font-weight: bold; }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .header-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        .btn-voltar {
+            text-decoration: none;
+            color: #007bff;
+            font-weight: bold;
+        }
         
-        .pedido-card { background: white; padding: 25px; border-radius: 10px; margin-bottom: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #3483fa; }
-        .pedido-title { margin: 0 0 10px 0; color: #333; font-size: 22px; }
-        .pedido-desc { color: #666; margin-bottom: 15px; }
+        .pedido-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border-left: 5px solid #007bff;
+        }
+        .pedido-title {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 22px;
+        }
+        .pedido-desc {
+            color: #666;
+            margin-bottom: 15px;
+        }
 
-        .ofertas-container { margin-top: 20px; border-top: 1px solid #eee; padding-top: 20px; }
-        .oferta-item { background: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 15px; display: flex; gap: 20px; border: 1px solid #eee; }
-        .oferta-img { width: 150px; height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid #ddd; }
-        .oferta-info { flex: 1; }
-        .price { font-size: 20px; font-weight: bold; color: #2ecc71; margin-bottom: 8px; }
-        .vendedor-desc { font-size: 14px; color: #444; line-height: 1.4; }
+        .ofertas-container {
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+        .oferta-item {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: flex;
+            gap: 20px;
+            border: 1px solid #eee;
+        }
+        .oferta-img {
+            width: 150px;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+        .oferta-info {
+            flex: 1;
+        }
+        .price {
+            font-size: 20px;
+            font-weight: bold;
+            color: #2ecc71;
+            margin-bottom: 8px;
+        }
+        .vendedor-desc {
+            font-size: 14px;
+            color: #444;
+            line-height: 1.4;
+        }
         
-        .no-offers { font-style: italic; color: #999; font-size: 14px; }
-        .loading { text-align: center; padding: 50px; color: #666; }
-        .badge-count { background: #3483fa; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+        .no-offers {
+            font-style: italic;
+            color: #999;
+            font-size: 14px;
+        }
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+        .badge-count {
+            background: #007bff;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="header-nav">
-        <a href="index.html" class="btn-voltar">← Voltar para Home</a>
+        <a href="index.html" class="btn-voltar">← Novo Pedido</a>
         <h2>Minhas Demandas</h2>
         <span id="user-email" style="font-size: 12px; color: #888;"></span>
     </div>
@@ -46,13 +119,13 @@
     const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_guT8FKUn87-uqtFWkIBGjA_3pfXwsZN";
     
-    // Inicialização única e correta do cliente do Supabase
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // Instanciação segura com variável customizada para contornar o congelamento JavaScript
+    const meuSupabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     let currentBuyerId = null;
 
     async function verificarSessao() {
-        const { data: { session }, error } = await supabaseClient.auth.getSession();
+        const { data: { session }, error } = await meuSupabaseClient.auth.getSession();
         
         if (error || !session) {
             alert("Sua sessão expirou ou você não está logado.");
@@ -67,8 +140,8 @@
 
     async function carregarMeusPedidos() {
         try {
-            // Busca os pedidos do comprador logado trazendo as ofertas acopladas (Join)
-            const { data: pedidos, error } = await supabaseClient
+            // Consulta relacional trazendo o pedido e suas propostas vinculadas
+            const { data: pedidos, error } = await meuSupabaseClient
                 .from('purchase_requests')
                 .select('*, seller_offers(*)')
                 .eq('buyer_id', currentBuyerId)
@@ -108,9 +181,6 @@
                                 <div class="oferta-info">
                                     <div class="price">R$ ${oferta.price.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
                                     <p class="vendedor-desc"><strong>Vendedor diz:</strong> ${oferta.description}</p>
-                                    <button onclick="contatarVendedor('${oferta.seller_id}')" style="margin-top:10px; background:#f3f3f3; border:1px solid #ccc; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:12px;">
-                                        Aceitar e Negociar
-                                    </button>
                                 </div>
                             </div>
                         `;
@@ -128,12 +198,7 @@
         }
     }
 
-    function contatarVendedor(sellerId) {
-        alert("Em breve você poderá abrir um chat direto com o vendedor! (ID do Vendedor: " + sellerId + ")");
-    }
-
     window.onload = verificarSessao;
 </script>
-
 </body>
 </html>

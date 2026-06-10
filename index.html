@@ -3,133 +3,223 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Querocomprar.com - Solicitar Produto</title>
+    <title>Querocomprar.com - Publicar Pedido</title>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 20px; }
-        .container { max-width: 500px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin: 0 auto; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input[type="text"], textarea, input[type="number"] { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-        button { background-color: #3483fa; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px; width: 100%; font-size: 16px; font-weight: bold; }
-        button:hover { background-color: #2968c8; }
-        .nav-container { max-width: 500px; margin: 0 auto 20px auto; display: flex; justify-content: space-between; align-items: center; }
-        .btn-logout { background-color: #e74c3c; color: white; border: none; padding: 6px 12px; cursor: pointer; border-radius: 4px; font-size: 14px; }
-        .btn-logout:hover { background-color: #c0392b; }
-        .link-pedidos { color: #3483fa; text-decoration: none; font-weight: bold; font-size: 14px; }
-        .link-pedidos:hover { text-decoration: underline; }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Menu Superior */
+        .nav-container {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .btn-link {
+            text-decoration: none;
+            color: #007bff;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .btn-sair {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 60%;
+        }
+
+        .btn-sair:hover {
+            background-color: #c82333;
+        }
+
+        /* Card do Formulário */
+        .card {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 500px;
+            box-sizing: border-box;
+        }
+
+        h2 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 24px;
+            color: #000;
+        }
+
+        p {
+            color: #333;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #000;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+            color: #333;
+        }
+
+        textarea {
+            resize: vertical;
+            height: 100px;
+        }
+
+        input::placeholder,
+        textarea::placeholder {
+            color: #999;
+        }
+
+        .btn-submit {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .btn-submit:hover {
+            background-color: #0056b3;
+        }
     </style>
 </head>
 <body>
 
-<div class="nav-container">
-    <a href="meus-pedidos.html" class="link-pedidos">📋 Ver Meus Pedidos</a>
-    <button class="btn-logout" id="btnLogout">Sair</button>
-</div>
+    <div class="nav-container">
+        <a href="meus-pedidos.html" class="btn-link">📋 Ver Meus<br>Pedidos</a>
+        <button class="btn-sair" onclick="logout()">Sair</button>
+    </div>
 
-<div class="container">
-    <h2>O que você deseja comprar?</h2>
-    <p>Preencha os detalhes e os vendedores enviarão propostas para você.</p>
-    
-    <form id="purchaseForm">
-        <div class="form-group">
-            <label for="title">Produto que procura:</label>
-            <input type="text" id="title" placeholder="Ex: iPhone 13 Pro Max Usado" required>
-        </div>
-
-        <div class="form-group">
-            <label for="description">Especificações / Detalhes:</label>
-            <textarea id="description" rows="4" placeholder="Ex: Preciso que tenha bateria acima de 85% e sem riscos na tela." required></textarea>
-        </div>
-
-        <div class="form-group">
-            <label for="budget">Quanto pretende pagar até (R$):</label>
-            <input type="number" id="budget" placeholder="Ex: 3500">
-        </div>
-
-        <button type="submit" id="btnSubmit">Publicar Pedido</button>
-    </form>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-<script>
-    // Configuração das credenciais do Querocomprar.com
-    const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_guT8FKUn87-uqtFWkIBGjA_3pfXwsZN";
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    // Variável global para reter o ID do comprador logado
-    let currentBuyerId = null;
-
-    // 1. VERIFICAÇÃO DE SESSÃO ATIVA
-    async function verificarSessao() {
-        const { data: { session } } = await supabase.auth.getSession();
+    <div class="card">
+        <h2>O que você deseja comprar?</h2>
+        <p>Preencha os detalhes e os vendedores enviarão propostas para você.</p>
         
-        if (!session) {
-            alert("Você precisa estar logado para publicar um pedido.");
-            window.location.href = "login.html";
-            return;
-        }
-        
-        // Atribui o ID real do usuário autenticado
-        currentBuyerId = session.user.id;
-    }
-
-    // 2. CAPTURA DO ENVIO DO FORMULÁRIO
-    document.getElementById('purchaseForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-
-        const btnSubmit = document.getElementById('btnSubmit');
-        btnSubmit.innerText = "Publicando...";
-        btnSubmit.disabled = true;
-
-        const title = document.getElementById('title').value;
-        const description = document.getElementById('description').value;
-        const budget = document.getElementById('budget').value;
-
-        try {
-            // Envia os dados associando com o ID real do comprador obtido na sessão
-            const { data, error } = await supabase
-                .from('purchase_requests')
-                .insert([
-                    { 
-                        buyer_id: currentBuyerId, 
-                        title: title, 
-                        description: description, 
-                        budget_max: budget ? parseFloat(budget) : null 
-                    }
-                ]);
-
-            if (error) throw error;
-
-            alert('Pedido publicado com sucesso! Agora os vendedores já podem te enviar propostas.');
-            document.getElementById('purchaseForm').reset();
+        <form id="form-pedido">
+            <div class="form-group">
+                <label for="produto">Produto que procura:</label>
+                <input type="text" id="produto" placeholder="Ex: iPhone 13 Pro Max Usado" required>
+            </div>
             
-            // Opcional: Redireciona o comprador para ver a lista de pedidos dele
-            window.location.href = "meus-pedidos.html";
+            <div class="form-group">
+                <label for="detalhes">Especificações / Detalhes:</label>
+                <textarea id="detalhes" placeholder="Ex: Preciso que tenha bateria acima de 85% e sem riscos na tela." required></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="valor">Quanto pretende pagar até (R$):</label>
+                <input type="number" id="valor" placeholder="Ex: 3500" step="0.01">
+            </div>
+            
+            <button type="submit" class="btn-submit">Publicar Pedido</button>
+        </form>
+    </div>
 
-        } catch (error) {
-            console.error('Erro ao publicar:', error.message);
-            alert('Erro ao publicar pedido: ' + error.message);
-        } finally {
-            btnSubmit.innerText = "Publicar Pedido";
-            btnSubmit.disabled = false;
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script>
+        const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
+        const SUPABASE_ANON_KEY = "sb_publishable_guT8FKUn87-uqtFWkIBGjA_3pfXwsZN";
+        
+        // Instanciação segura para evitar conflito com a palavra reservada 'supabase'
+        const meuSupabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // Bloqueia a página se o usuário não estiver autenticado
+        async function verificarSessao() {
+            const { data: { session } } = await meuSupabaseClient.auth.getSession();
+            if (!session) {
+                window.location.href = "login.html";
+            }
         }
-    });
 
-    // 3. FUNÇÃO PARA DESLOGAR (LOGOUT)
-    document.getElementById('btnLogout').addEventListener('click', async () => {
-        const { error } = await supabase.auth.signOut();
-        if (error) {
-            alert("Erro ao sair: " + error.message);
-        } else {
+        // Função para cadastrar o produto no banco de dados
+        async function publicarPedido(event) {
+            event.preventDefault();
+            
+            const produto = document.getElementById('produto').value;
+            const detalhes = document.getElementById('detalhes').value;
+            const valor = document.getElementById('valor').value;
+
+            try {
+                const { data: { session } } = await meuSupabaseClient.auth.getSession();
+                
+                if (!session) {
+                    alert("Sessão encerrada. Faça login novamente.");
+                    window.location.href = "login.html";
+                    return;
+                }
+
+                // Insere os dados na tabela correspondente do Supabase
+                const { data, error } = await meuSupabaseClient
+                    .from('purchase_requests')
+                    .insert([
+                        { 
+                            title: produto, 
+                            description: detalhes, 
+                            price: valor ? parseFloat(valor) : null,
+                            buyer_id: session.user.id,
+                            status: 'open'
+                        }
+                    ]);
+
+                if (error) throw error;
+
+                alert("Pedido publicado com sucesso!");
+                window.location.href = "meus-pedidos.html";
+
+            } catch (error) {
+                console.error('Erro:', error.message);
+                alert("Erro ao salvar produto: " + error.message);
+            }
+        }
+
+        // Função de Logout
+        async function logout() {
+            await meuSupabaseClient.auth.signOut();
             window.location.href = "login.html";
         }
-    });
 
-    // Executa a validação assim que carregar a página
-    window.onload = verificarSessao;
-</script>
-
+        // Vincula os eventos às funções correspondentes
+        document.getElementById('form-pedido').addEventListener('submit', publicarPedido);
+        window.onload = verificarSessao;
+    </script>
 </body>
 </html>
