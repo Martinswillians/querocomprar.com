@@ -18,11 +18,18 @@
         button { background-color: #3483fa; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px; font-weight: bold; }
         button:hover { background-color: #2968c8; }
         .loading { text-align: center; font-size: 18px; color: #666; }
+        .logout-container { text-align: right; margin-bottom: 20px; }
+        .btn-logout { background-color: #e74c3c; color: white; padding: 8px 12px; font-size: 14px; }
+        .btn-logout:hover { background-color: #c0392b; }
     </style>
 </head>
 <body>
 
 <div class="container">
+    <div class="logout-container">
+        <button class="btn-logout" id="btnLogout">Sair da Conta</button>
+    </div>
+
     <h1>Pedidos de Compradores</h1>
     <p style="text-align: center; margin-bottom: 30px;">Veja o que os usuários querem comprar e faça sua oferta!</p>
     
@@ -39,16 +46,33 @@
     const SUPABASE_ANON_KEY = "sb_publishable_guT8FKUn87-uqtFWkIBGjA_3pfXwsZN";
     const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // ID temporário para simular o vendedor atual (até implementar o Auth)
-    const mockSellerId = "11111111-1111-1111-1111-111111111111";
+    // Variável global que guardará o ID do vendedor logado
+    let currentSellerId = null;
 
-    // 1. FUNÇÃO PARA BUSCAR PEDIDOS DO BANCO
+    // 1. VERIFICAÇÃO DE SESSÃO (PROTEÇÃO DA PÁGINA)
+    async function verificarSessao() {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+            alert("Acesso negado. Você precisa estar logado para acessar o painel do vendedor.");
+            window.location.href = "login.html";
+            return;
+        }
+        
+        // Guarda o ID real do usuário autenticado
+        currentSellerId = session.user.id;
+        
+        // Se estiver tudo certo, carrega a lista de pedidos do banco
+        carregarPedidos();
+    }
+
+    // 2. FUNÇÃO PARA BUSCAR PEDIDOS DO BANCO
     async function carregarPedidos() {
         try {
             const { data: pedidos, error } = await supabase
                 .from('purchase_requests')
                 .select('*')
-                .eq('status', 'open') // Só mostra pedidos abertos
+                .eq('status', 'open') 
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -61,7 +85,6 @@
                 return;
             }
 
-            // Renderiza cada pedido na tela
             pedidos.forEach(pedido => {
                 const card = document.createElement('div');
                 card.className = 'card';
@@ -79,7 +102,7 @@
                             </div>
                             <div class="form-group">
                                 <label>Detalhes do seu produto:</label>
-                                <textarea rows="2" required placeholder="Ex: Aparelho impecável, acompanha carregador original e nota fiscal." id="desc-${pedido.id}"></textarea>
+                                <textarea rows="2" required placeholder="Ex: Aparelho impecável, com nota fiscal." id="desc-${pedido.id}"></textarea>
                             </div>
                             <div class="form-group">
                                 <label>Foto do Produto:</label>
@@ -98,7 +121,7 @@
         }
     }
 
-    // 2. FUNÇÃO QUE FAZ UPLOAD DA FOTO E SALVA A OFERTA
+    // 3. FUNÇÃO QUE FAZ UPLOAD DA FOTO E SALVA A OFERTA COMPLETA
     async function enviarProposta(event, requestId) {
         event.preventDefault();
         
@@ -111,42 +134,42 @@
         const arquivoFoto = document.getElementById(`file-${requestId}`).files[0];
 
         try {
-            // A. Gerar um nome único para o arquivo para evitar sobrescritas no Storage
+            // A. Gerar nome exclusivo para o arquivo no Storage
             const fileExt = arquivoFoto.name.split('.').pop();
             const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
             const filePath = `${fileName}`;
 
-            // B. Upload do arquivo para o bucket 'offer-images'
+            // B. Upload da imagem para o bucket 'offer-images'
             const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('offer-images')
                 .upload(filePath, arquivoFoto);
 
             if (uploadError) throw uploadError;
 
-            // C. Pegar a URL pública da imagem que acabou de ser enviada
+            // C. Capturar a URL pública da imagem salva
             const { data: urlData } = supabase.storage
                 .from('offer-images')
                 .getPublicUrl(filePath);
             
             const publicUrl = urlData.publicUrl;
 
-            // D. Salvar a proposta completa na tabela 'seller_offers'
+            // D. Vincular tudo na tabela 'seller_offers' usando o ID real do vendedor
             const { error: insertError } = await supabase
                 .from('seller_offers')
                 .insert([
                     {
                         request_id: requestId,
-                        seller_id: mockSellerId,
+                        seller_id: currentSellerId, // Usando o ID real verificado na sessão
                         price: parseFloat(preco),
                         description: descricao,
-                        images_urls: [publicUrl] // Passando como array conforme modelagem
+                        images_urls: [publicUrl]
                     }
                 ]);
 
             if (insertError) throw insertError;
 
             alert('Sua oferta foi enviada com sucesso ao comprador!');
-            carregarPedidos(); // Atualiza a tela
+            carregarPedidos(); 
 
         } catch (error) {
             console.error('Erro na operação:', error.message);
@@ -156,8 +179,18 @@
         }
     }
 
-    // Inicializa carregando os dados assim que a página abre
-    window.onload = carregarPedidos;
+    // 4. FUNÇÃO PARA DESLOGAR (LOGOUT)
+    document.getElementById('btnLogout').addEventListener('click', async () => {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+            alert("Erro ao sair: " + error.message);
+        } else {
+            window.location.href = "login.html";
+        }
+    });
+
+    // Inicia o fluxo validando se o usuário está autenticado
+    window.onload = verificarSessao;
 </script>
 
 </body>

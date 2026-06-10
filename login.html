@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Querocomprar.com - Entrar / Cadastrar</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-box { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        h2 { text-align: center; color: #333; margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .btn-container { display: flex; gap: 10px; margin-top: 20px; }
+        button { flex: 1; padding: 10px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
+        .btn-login { background-color: #3483fa; color: white; }
+        .btn-signup { background-color: #2ecc71; color: white; }
+        button:hover { opacity: 0.9; }
+    </style>
+</head>
+<body>
+
+<div class="login-box">
+    <h2>Querocomprar.com</h2>
+    <form id="authForm">
+        <div class="form-group">
+            <label for="email">E-mail:</label>
+            <input type="email" id="email" required placeholder="seuemail@exemplo.com">
+        </div>
+        <div class="form-group">
+            <label for="password">Senha:</label>
+            <input type="password" id="password" required placeholder="Sua senha">
+        </div>
+        
+        <div class="btn-container">
+            <button type="button" class="btn-login" id="btnLogin">Entrar</button>
+            <button type="button" class="btn-signup" id="btnSignup">Cadastrar Novo</button>
+        </div>
+    </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+    const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_guT8FKUn87-uqtFWkIBGjA_3pfXwsZN";
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+
+    // FUNÇÃO: LOGAR USUÁRIO
+    document.getElementById('btnLogin').addEventListener('click', async () => {
+        const email = emailInput.value;
+        const password = passwordInput.value;
+
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email: email,
+            password: password,
+        });
+
+        if (error) {
+            alert("Erro no login: " + error.message);
+        } else {
+            alert("Login efetuado com sucesso!");
+            // Redireciona o vendedor para o painel de vendas
+            window.location.href = "vendedor.html"; 
+        }
+    });
+
+    // FUNÇÃO: CADASTRAR NOVO USUÁRIO
+    document.getElementById('btnSignup').addEventListener('click', async () => {
+        const email = emailInput.value;
+        const password = passwordInput.value;
+
+        const { data, error } = await supabase.auth.signUp({
+            email: email,
+            password: password,
+        });
+
+        if (error) {
+            alert("Erro no cadastro: " + error.message);
+        } else {
+            alert("Cadastro realizado! Se o 'Confirm Email' estiver ativo, verifique sua caixa de entrada.");
+        }
+    });
+</script>
+
+</body>
+</html>
