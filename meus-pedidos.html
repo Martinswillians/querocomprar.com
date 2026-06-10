@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Querocomprar.com - Meus Pedidos e Ofertas</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        .header-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .btn-voltar { text-decoration: none; color: #3483fa; font-weight: bold; }
+        
+        .pedido-card { background: white; padding: 25px; border-radius: 10px; margin-bottom: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #3483fa; }
+        .pedido-title { margin: 0 0 10px 0; color: #333; font-size: 22px; }
+        .pedido-desc { color: #666; margin-bottom: 15px; }
+
+        .ofertas-container { margin-top: 20px; border-top: 1px solid #eee; padding-top: 20px; }
+        .oferta-item { background: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 15px; display: flex; gap: 20px; border: 1px solid #eee; }
+        .oferta-img { width: 150px; height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid #ddd; }
+        .oferta-info { flex: 1; }
+        .price { font-size: 20px; font-weight: bold; color: #2ecc71; margin-bottom: 8px; }
+        .vendedor-desc { font-size: 14px; color: #444; line-height: 1.4; }
+        
+        .no-offers { font-style: italic; color: #999; font-size: 14px; }
+        .loading { text-align: center; padding: 50px; color: #666; }
+        .badge-count { background: #3483fa; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-nav">
+        <a href="index.html" class="btn-voltar">← Novo Pedido</a>
+        <h2>Minhas Demandas</h2>
+        <span id="user-email" style="font-size: 12px; color: #888;"></span>
+    </div>
+
+    <div id="lista-pedidos">
+        <p class="loading">Buscando seus pedidos e ofertas...</p>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+    const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_guT8FKUn87-uqtFWkIBGjA_3pfXwsZN";
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let currentBuyerId = null;
+
+    async function verificarSessao() {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            window.location.href = "login.html";
+            return;
+        }
+        currentBuyerId = session.user.id;
+        document.getElementById('user-email').innerText = session.user.email;
+        carregarMeusPedidos();
+    }
+
+    async function carregarMeusPedidos() {
+        try {
+            // Busca os pedidos do comprador logado e traz junto as ofertas de cada um (Join)
+            const { data: pedidos, error } = await supabase
+                .from('purchase_requests')
+                .select('*, seller_offers(*)')
+                .eq('buyer_id', currentBuyerId)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            const container = document.getElementById('lista-pedidos');
+            container.innerHTML = '';
+
+            if (pedidos.length === 0) {
+                container.innerHTML = '<p class="loading">Você ainda não publicou nenhum pedido.</p>';
+                return;
+            }
+
+            pedidos.forEach(pedido => {
+                const divPedido = document.createElement('div');
+                divPedido.className = 'pedido-card';
+                
+                // Cabeçalho do pedido
+                let html = `
+                    <h3 class="pedido-title">${pedido.title} <span class="badge-count">${pedido.seller_offers.length} ofertas</span></h3>
+                    <p class="pedido-desc">${pedido.description}</p>
+                    <div class="ofertas-container">
+                `;
+
+                // Verifica se há ofertas
+                if (pedido.seller_offers.length === 0) {
+                    html += `<p class="no-offers">Aguardando propostas de vendedores...</p>`;
+                } else {
+                    // Lista cada oferta recebida
+                    pedido.seller_offers.forEach(oferta => {
+                        // Pega a primeira imagem do array (ou uma placeholder se vazio)
+                        const imgUrl = (oferta.images_urls && oferta.images_urls.length > 0) 
+                                       ? oferta.images_urls[0] 
+                                       : 'https://via.placeholder.com/150?text=Sem+Foto';
+
+                        html += `
+                            <div class="oferta-item">
+                                <img src="${imgUrl}" class="oferta-img" alt="Foto do produto">
+                                <div class="oferta-info">
+                                    <div class="price">R$ ${oferta.price.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
+                                    <p class="vendedor-desc"><strong>Vendedor diz:</strong> ${oferta.description}</p>
+                                    <button onclick="contatarVendedor('${oferta.seller_id}')" style="margin-top:10px; background:#f3f3f3; border:1px solid #ccc; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:12px;">
+                                        Aceitar e Negociar
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+
+                html += `</div>`;
+                divPedido.innerHTML = html;
+                container.appendChild(divPedido);
+            });
+
+        } catch (error) {
+            console.error('Erro:', error.message);
+            document.getElementById('lista-pedidos').innerHTML = '<p class="loading">Erro ao carregar seus dados.</p>';
+        }
+    }
+
+    function contatarVendedor(sellerId) {
+        alert("Em breve você poderá abrir um chat direto com o vendedor! (ID do Vendedor: " + sellerId + ")");
+    }
+
+    window.onload = verificarSessao;
+</script>
+
+</body>
+</html>
