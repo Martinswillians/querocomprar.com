@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Querocomprar.com - Minhas Demandas</title>
+    <title>Querocomprar.com - Meus Pedidos</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -14,7 +14,8 @@
             flex-direction: column;
             align-items: center;
         }
-        .header-container {
+
+        .nav-container {
             width: 100%;
             max-width: 600px;
             display: flex;
@@ -22,124 +23,154 @@
             align-items: center;
             margin-bottom: 20px;
         }
-        .btn-voltar {
+
+        .btn-link {
             text-decoration: none;
             color: #007bff;
             font-weight: bold;
-            font-size: 16px;
+            font-size: 14px;
         }
-        h2 {
-            margin: 0;
-            color: #000;
-            font-size: 24px;
+
+        .btn-sair {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 30%;
         }
-        .lista-pedidos {
+
+        .btn-sair:hover {
+            background-color: #c82333;
+        }
+
+        .card {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             width: 100%;
             max-width: 600px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-        .pedido-card {
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             box-sizing: border-box;
         }
-        .pedido-titulo {
-            font-size: 18px;
-            font-weight: bold;
-            color: #007bff;
-            margin-bottom: 5px;
+
+        h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 24px;
+            color: #000;
         }
-        .pedido-detalhes {
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
             font-size: 14px;
+        }
+
+        th {
+            background-color: #f8f9fa;
             color: #333;
-            margin-bottom: 10px;
         }
-        .pedido-valor {
-            font-size: 15px;
-            font-weight: bold;
+
+        .status-open {
             color: #28a745;
-        }
-        .sem-pedidos {
-            color: #666;
-            font-size: 16px;
-            text-align: center;
-            margin-top: 40px;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
 
-    <div class="header-container">
-        <a href="index.html" class="btn-voltar">← Novo Pedido</a>
-        <h2>Minhas Demandas</h2>
+    <div class="nav-container">
+        <a href="index.html" class="btn-link">➕ Criar Novo Pedido</a>
+        <button class="btn-sair" onclick="logout()">Sair</button>
     </div>
 
-    <div class="lista-pedidos" id="container-demandas">
-        <div class="sem-pedidos" id="status-loading">Buscando seus pedidos e ofertas...</div>
+    <div class="card">
+        <h2>Meus Pedidos Cadastrados</h2>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Produto</th>
+                    <th>Preço Estimado</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="lista-pedidos">
+                <tr>
+                    <td colspan="3" style="text-align: center; color: #666;">Carregando pedidos...</td>
+                </tr>
+            </tbody>
+        </table>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <script>
         const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmhicXRnb2lrY2Fya2tqaHVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk5MzMsImV4cCI6MjA5NjY4NTkzM30._qpYBCfDMWg51pF2MQgi4_FwTW535PW2tpncNFoGXns";
         
         const meuSupabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        async function carregarMeusPedidos() {
-            const container = document.getElementById('container-demandas');
-            const loadingStatus = document.getElementById('status-loading');
-
+        async function carregarPedidos() {
             try {
                 const { data: { session } } = await meuSupabaseClient.auth.getSession();
-                
                 if (!session) {
                     window.location.href = "login.html";
                     return;
                 }
 
-                // Busca as requisições vinculadas unicamente ao usuário logado
+                // Busca os pedidos salvos do usuário atual no banco de dados
                 const { data: pedidos, error } = await meuSupabaseClient
                     .from('purchase_requests')
-                    .select('*')
-                    .eq('buyer_id', session.user.id)
-                    .order('created_at', { ascending: false });
+                    .select('title, price_estimate, status')
+                    .eq('buyer_id', session.user.id);
 
                 if (error) throw error;
 
+                const tabelaBody = document.getElementById('lista-pedidos');
+                tabelaBody.innerHTML = '';
+
                 if (!pedidos || pedidos.length === 0) {
-                    container.innerHTML = `<div class="sem-pedidos">Você ainda não publicou nenhuma demanda.</div>`;
+                    tabelaBody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #666;">Nenhum pedido encontrado.</td></tr>`;
                     return;
                 }
 
-                // Limpa o indicador de carregamento
-                container.innerHTML = '';
-
-                // Monta a listagem dinâmica na tela
+                // Renderiza cada linha na tabela
                 pedidos.forEach(pedido => {
-                    const card = document.createElement('div');
-                    card.className = 'pedido-card';
-                    
-                    const valorFormatado = pedido.price ? parseFloat(pedido.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00';
-
-                    card.innerHTML = `
-                        <div class="pedido-titulo">${pedido.title}</div>
-                        <div class="pedido-detalhes">${pedido.description}</div>
-                        <div class="pedido-valor">Preço Alvo: ${valorFormatado}</div>
+                    const linha = document.createElement('tr');
+                    linha.innerHTML = `
+                        <td><strong>${pedido.title}</strong></td>
+                        <td>R$ ${parseFloat(pedido.price_estimate || 0).toFixed(2)}</td>
+                        <td><span class="status-open">${pedido.status || 'open'}</span></td>
                     `;
-                    container.appendChild(card);
+                    tabelaBody.appendChild(linha);
                 });
 
             } catch (error) {
-                console.error('Erro ao carregar demandas:', error.message);
-                container.innerHTML = `<div class="sem-pedidos" style="color:red;">Erro ao carregar os dados: ${error.message}</div>`;
+                console.error('Erro ao carregar lista:', error.message);
+                document.getElementById('lista-pedidos').innerHTML = `<tr><td colspan="3" style="text-align: center; color: #dc3545;">Erro ao carregar dados.</td></tr>`;
             }
         }
 
-        window.onload = carregarMeusPedidos;
+        async function logout() {
+            await meuSupabaseClient.auth.signOut();
+            localStorage.clear();
+            window.location.href = "login.html";
+        }
+
+        // Executa a busca assim que a página termina de carregar
+        window.onload = carregarPedidos;
     </script>
 </body>
 </html>
