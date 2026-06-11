@@ -165,54 +165,63 @@
         }
 
         async function publicarPedido(event) {
-            event.preventDefault();
-            
-            const produto = document.getElementById('produto').value.trim();
-            const detalhes = document.getElementById('detalhes').value.trim();
-            const valorInput = document.getElementById('valor').value;
-            const valorNumerico = valorInput ? parseFloat(valorInput) : 0.0;
+    event.preventDefault();
+    
+    const produto = document.getElementById('produto').value.trim();
+    const detalhes = document.getElementById('detalhes').value.trim();
+    const valorInput = document.getElementById('valor').value;
+    const valorNumerico = valorInput ? parseFloat(valorInput) : 0.0;
 
-            try {
-                // Obtém a sessão atualizada para garantir o ID do usuário
-                const { data: sessionData, error: sessionError } = await meuSupabaseClient.auth.getSession();
-                
-                if (sessionError || !sessionData || !sessionData.session) {
-                    throw new Error("Sessão expirada. Faça login novamente.");
-                }
+    try {
+        let userId = null;
 
-                const userId = sessionData.session.user.id;
+        const { data: sessionData, error: sessionError } = await meuSupabaseClient.auth.getSession();
+        if (sessionData && sessionData.session && sessionData.session.user) {
+            userId = sessionData.session.user.id;
+        }
 
-                // Executa a inserção mapeada estritamente com os campos reais da tabela
-                const { data, error } = await meuSupabaseClient
-                    .from('purchase_requests')
-                    .insert([
-                        { 
-                            title: produto, 
-                            description: detalhes, 
-                            price_estimate: valorNumerico,
-                            buyer_id: userId,
-                            status: 'open'
-                        }
-                    ]);
-
-                if (error) throw error;
-
-                alert("Pedido publicado com sucesso!");
-                window.location.href = "meus-pedidos.html";
-
-            } catch (error) {
-                console.error('Erro de persistência:', error.message);
-                
-                // Trata especificamente o erro de token corrompido ou inválido do Supabase (JWTInvalid / PGRST301)
-                if (error.message.includes("JWT") || error.code === "PGRST301") {
-                    alert("Sua sessão de login tornou-se inválida devido a testes anteriores. Você será redirecionado para realizar um novo login limpo.");
-                    localStorage.clear();
-                    window.location.href = "login.html";
-                } else {
-                    alert("Erro ao salvar produto: " + error.message);
-                }
+        if (!userId) {
+            const { data: userData } = await meuSupabaseClient.auth.getUser();
+            if (userData && userData.user) {
+                userId = userData.user.id;
             }
         }
+
+        if (!userId) {
+            alert("Sessão expirada. Por favor, efetue o login novamente.");
+            window.location.href = "login.html";
+            return;
+        }
+
+        const { data, error } = await meuSupabaseClient
+            .from('purchase_requests')
+            .insert([
+                { 
+                    title: produto, 
+                    description: detalhes, 
+                    price_estimate: valorNumerico,
+                    buyer_id: userId,
+                    status: 'open'
+                }
+            ]);
+
+        if (error) throw error;
+
+        alert("Pedido publicado com sucesso!");
+        // Redirecionamento corrigido para bater com o nome do seu arquivo no VS Code
+        window.location.href = "meus_pedidos.html"; 
+
+    } catch (error) {
+        console.error('Erro de persistência:', error.message);
+        if (error.message.includes("JWT") || error.code === "PGRST301") {
+            alert("Sua sessão tornou-se inválida. Realize um novo login.");
+            localStorage.clear();
+            window.location.href = "login.html";
+        } else {
+            alert("Erro ao salvar produto: " + error.message);
+        }
+    }
+}
 
         async function logout() {
             await meuSupabaseClient.auth.signOut();
