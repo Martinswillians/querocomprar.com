@@ -154,10 +154,8 @@
         const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmhicXRnb2lrY2Fya2tqaHVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk5MzMsImV4cCI6MjA5NjY4NTkzM30._qpYBCfDMWg51pF2MQgi4_FwTW535PW2tpncNFoGXns";
         
-        // Inicialização com escopo protegido contra conflito global do SDK
         const meuSupabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // Validação rigorosa de estado de autenticação antes de renderizar dados
         async function verificarSessao() {
             const { data: { session } } = await meuSupabaseClient.auth.getSession();
             if (!session) {
@@ -165,37 +163,48 @@
             }
         }
 
-        // Fluxo de envio sanitizado e livre de conflitos com restrições NOT NULL do Postgres
         async function publicarPedido(event) {
             event.preventDefault();
             
             const produto = document.getElementById('produto').value.trim();
             const detalhes = document.getElementById('detalhes').value.trim();
             const valorInput = document.getElementById('valor').value;
-
-            // Coerção estrita para ponto flutuante. Caso vazio, define 0.0 para atender o NOT NULL
             const valorNumerico = valorInput ? parseFloat(valorInput) : 0.0;
 
             try {
-                const { data: { session }, error: sessionError } = await meuSupabaseClient.auth.getSession();
-                
-                if (sessionError || !session || !session.user) {
-                    alert("Sessão inválida ou expirada. Refaça o login.");
+                let userId = null;
+
+                // Camada 1: Validação via sessão ativa em cache
+                const { data: sessionData } = await meuSupabaseClient.auth.getSession();
+                if (sessionData && sessionData.session && sessionData.session.user) {
+                    userId = sessionData.session.user.id;
+                }
+
+                // Camada 2: Fallback direto no servidor de autenticação do Supabase
+                if (!userId) {
+                    const { data: userData } = await meuSupabaseClient.auth.getUser();
+                    if (userData && userData.user) {
+                        userId = userData.user.id;
+                    }
+                }
+
+                // Bloqueio preventivo local caso a sessão tenha caído
+                if (!userId) {
+                    alert("Sessão expirada ou inválida. Por favor, realize o login novamente.");
                     window.location.href = "login.html";
                     return;
                 }
 
-                // Payload definitivo: Preenche 'price' e 'price_estimate' simultaneamente
-                // para cobrir qualquer variação de colunas ativas na sua tabela 'purchase_requests'
+                // Gravação com mapeamento redundante completo aceito pela base de dados
                 const { data, error } = await meuSupabaseClient
                     .from('purchase_requests')
                     .insert([
                         { 
                             title: produto, 
                             description: detalhes, 
-                            price: valorNumerico,           // Atende à restrição de NOT NULL apontada no console
-                            price_estimate: valorNumerico,  // Mantém compatibilidade com a coluna original
-                            buyer_id: session.user.id,      // Validado com sucesso pelo RLS do banco
+                            price: valorNumerico,
+                            price_estimate: valorNumerico,
+                            buyer_id: userId,
                             status: 'open'
                         }
                     ]);
@@ -206,7 +215,7 @@
                 window.location.href = "meus-pedidos.html";
 
             } catch (error) {
-                console.error('[Supabase Error]:', error.message);
+                console.error('Erro na transação de dados:', error.message);
                 alert("Erro ao salvar produto: " + error.message);
             }
         }
