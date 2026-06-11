@@ -167,45 +167,45 @@
 
         // Função corrigida para bater exatamente com as colunas do seu banco de dados
         async function publicarPedido(event) {
-            event.preventDefault();
-            
-            const produto = document.getElementById('produto').value;
-            const detalhes = document.getElementById('detalhes').value;
-            const valor = document.getElementById('valor').value;
+    event.preventDefault();
+    
+    const produto = document.getElementById('produto').value;
+    const detalhes = document.getElementById('detalhes').value;
+    const valor = document.getElementById('valor').value;
 
-            try {
-                const { data: { session } } = await meuSupabaseClient.auth.getSession();
-                
-                if (!session) {
-                    alert("Sessão encerrada. Faça login novamente.");
-                    window.location.href = "login.html";
-                    return;
-                }
-
-                // INSERÇÃO CORRIGIDA: mapeando 'user_id' e 'price' conforme a estrutura real da sua tabela
-                const { data, error } = await meuSupabaseClient
-                    .from('purchase_requests')
-                    .insert([
-                        { 
-                            title: produto, 
-                            description: detalhes, 
-                            price: valor ? parseFloat(valor) : 0,
-                            user_id: session.user.id, // CORREÇÃO AQUI: Mudado de buyer_id para user_id
-                            status: 'open'
-                        }
-                    ]);
-
-                if (error) throw error;
-
-                alert("Pedido publicado com sucesso!");
-                window.location.href = "meus-pedidos.html";
-
-            } catch (error) {
-                console.error('Erro ao salvar:', error.message);
-                alert("Erro ao salvar produto: " + error.message);
-            }
+    try {
+        // Captura a sessão atual de forma direta
+        const { data: { session } } = await meuSupabaseClient.auth.getSession();
+        
+        if (!session || !session.user) {
+            alert("Sessão encerrada. Faça login novamente.");
+            window.location.href = "login.html";
+            return;
         }
 
+        // Envio com os nomes exatos mapeados pelo banco
+        const { data, error } = await meuSupabaseClient
+            .from('purchase_requests')
+            .insert([
+                { 
+                    title: produto, 
+                    description: detalhes, 
+                    price: valor ? parseFloat(valor) : 0, 
+                    buyer_id: session.user.id, // ID correto da sessão indo para buyer_id
+                    status: 'open'
+                }
+            ]);
+
+        if (error) throw error;
+
+        alert("Pedido publicado com sucesso!");
+        window.location.href = "meus-pedidos.html";
+
+    } catch (error) {
+        console.error('Erro ao salvar:', error.message);
+        alert("Erro ao salvar produto: " + error.message);
+    }
+}
         async function logout() {
             await meuSupabaseClient.auth.signOut();
             window.location.href = "login.html";
