@@ -194,6 +194,7 @@
 
                 const { data, error } = await meuSupabaseClient
                     .from('purchase_requests')
+                    console.log("Tentando salvar com userId:", userId);
                     .insert([
                         { 
                             title: produto, 
