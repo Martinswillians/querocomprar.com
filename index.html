@@ -194,16 +194,15 @@
                     return;
                 }
 
-                // Inserção mapeada perfeitamente com as colunas da sua tabela corrigida
                 const { data, error } = await meuSupabaseClient
                     .from('purchase_requests')
                     .insert([
                         { 
                             title: produto, 
                             description: detalhes, 
-                            price_estimate: valorNumerico, // Bate com a coluna float8 do seu banco
+                            price_estimate: valorNumerico,
                             buyer_id: userId,
-                            status: 'open' // Envia explicitamente o status correto para o banco
+                            status: 'open'
                         }
                     ]);
 
