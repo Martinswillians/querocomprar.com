@@ -154,10 +154,10 @@
         const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmhicXRnb2lrY2Fya2tqaHVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk5MzMsImV4cCI6MjA5NjY4NTkzM30._qpYBCfDMWg51pF2MQgi4_FwTW535PW2tpncNFoGXns";
         
-        // Inicialização protegida contra erros de Syntax global
+        // Uso de escopo isolado para evitar conflitos com a biblioteca global
         const meuSupabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // Bloqueia acesso front-end se não estiver logado
+        // Validação de segurança estrita no carregamento da página
         async function verificarSessao() {
             const { data: { session } } = await meuSupabaseClient.auth.getSession();
             if (!session) {
@@ -165,47 +165,47 @@
             }
         }
 
-        // Função corrigida para bater exatamente com as colunas do seu banco de dados
+        // Submissão do formulário com mapeamento validado pelo banco de dados
         async function publicarPedido(event) {
-    event.preventDefault();
-    
-    const produto = document.getElementById('produto').value;
-    const detalhes = document.getElementById('detalhes').value;
-    const valor = document.getElementById('valor').value;
+            event.preventDefault();
+            
+            const produto = document.getElementById('produto').value;
+            const detalhes = document.getElementById('detalhes').value;
+            const valor = document.getElementById('valor').value;
 
-    try {
-        // Captura a sessão atual de forma direta
-        const { data: { session } } = await meuSupabaseClient.auth.getSession();
-        
-        if (!session || !session.user) {
-            alert("Sessão encerrada. Faça login novamente.");
-            window.location.href = "login.html";
-            return;
+            try {
+                const { data: { session } } = await meuSupabaseClient.auth.getSession();
+                
+                if (!session || !session.user) {
+                    alert("Sessão encerrada. Faça login novamente.");
+                    window.location.href = "login.html";
+                    return;
+                }
+
+                // Inserção com mapeamento estrito para as colunas: title, description, price_estimate, buyer_id e status
+                const { data, error } = await meuSupabaseClient
+                    .from('purchase_requests')
+                    .insert([
+                        { 
+                            title: produto, 
+                            description: detalhes, 
+                            price_estimate: valor ? parseFloat(valor) : 0, 
+                            buyer_id: session.user.id,
+                            status: 'open'
+                        }
+                    ]);
+
+                if (error) throw error;
+
+                alert("Pedido publicado com sucesso!");
+                window.location.href = "meus-pedidos.html";
+
+            } catch (error) {
+                console.error('Erro na gravação:', error.message);
+                alert("Erro ao salvar produto: " + error.message);
+            }
         }
 
-        // Envio com os nomes exatos mapeados pelo banco
-        const { data, error } = await meuSupabaseClient
-            .from('purchase_requests')
-            .insert([
-                { 
-                    title: produto, 
-                    description: detalhes, 
-                    price: valor ? parseFloat(valor) : 0, 
-                    buyer_id: session.user.id, // ID correto da sessão indo para buyer_id
-                    status: 'open'
-                }
-            ]);
-
-        if (error) throw error;
-
-        alert("Pedido publicado com sucesso!");
-        window.location.href = "meus-pedidos.html";
-
-    } catch (error) {
-        console.error('Erro ao salvar:', error.message);
-        alert("Erro ao salvar produto: " + error.message);
-    }
-}
         async function logout() {
             await meuSupabaseClient.auth.signOut();
             window.location.href = "login.html";
