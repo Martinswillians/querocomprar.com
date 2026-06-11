@@ -157,11 +157,13 @@
 
     <script>
         const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
-        // CHAVE CORRIGIDA COM BASE NA SUA ABA DE API KEYS
+        // CHAVE CONFIGURADA E CORRIGIDA COM O TEU TOKEN SECRETO REAL
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmhicXRnb2lrY2Fya2tqaHVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk5MzMsImV4cCI6MjA5NjY4NTkzM30._qpYBCfDMWg51pF2MQgi4_FwTW535PW2tpncNFoGXns";
         
+        // Uso de variável estável que contorna o erro de Syntax do interpretador
         const meuSupabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+        // Segurança de rota no front-end
         async function verificarSessao() {
             const { data: { session } } = await meuSupabaseClient.auth.getSession();
             if (!session) {
@@ -169,6 +171,7 @@
             }
         }
 
+        // Envio do formulário mapeado para o banco de dados
         async function publicarPedido(event) {
             event.preventDefault();
             
@@ -185,13 +188,14 @@
                     return;
                 }
 
+                // Salva os dados respeitando a restrição de NOT NULL da tabela
                 const { data, error } = await meuSupabaseClient
                     .from('purchase_requests')
                     .insert([
                         { 
                             title: produto, 
                             description: detalhes, 
-                            price: valor ? parseFloat(valor) : null,
+                            price: valor ? parseFloat(valor) : 0, // Evita envio de nulos para a coluna price
                             buyer_id: session.user.id,
                             status: 'open'
                         }
