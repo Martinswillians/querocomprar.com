@@ -154,10 +154,10 @@
         const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmhicXRnb2lrY2Fya2tqaHVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk5MzMsImV4cCI6MjA5NjY4NTkzM30._qpYBCfDMWg51pF2MQgi4_FwTW535PW2tpncNFoGXns";
         
-        // Uso de escopo isolado para evitar conflitos com a biblioteca global
+        // Instanciação isolada para evitar colisão de escopo global
         const meuSupabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // Validação de segurança estrita no carregamento da página
+        // Middleware de verificação de ciclo de vida da sessão
         async function verificarSessao() {
             const { data: { session } } = await meuSupabaseClient.auth.getSession();
             if (!session) {
@@ -165,35 +165,36 @@
             }
         }
 
-        // Submissão do formulário com mapeamento validado pelo banco de dados
+        // Handler de submissão assíncrona
         async function publicarPedido(event) {
             event.preventDefault();
             
-            const produto = document.getElementById('produto').value;
-            const detalhes = document.getElementById('detalhes').value;
-            const valor = document.getElementById('valor').value;
+            const produto = document.getElementById('produto').value.trim();
+            const detalhes = document.getElementById('detalhes').value.trim();
+            const valorInput = document.getElementById('valor').value;
+
+            // Tratamento e coerção de tipo estrita para ponto flutuante
+            const precoEstimado = valorInput ? parseFloat(valorInput) : 0.0;
 
             try {
-                const { data: { session } } = await meuSupabaseClient.auth.getSession();
+                const { data: { session }, error: sessionError } = await meuSupabaseClient.auth.getSession();
                 
-                if (!session || !session.user) {
-                    alert("Sessão encerrada. Faça login novamente.");
+                if (sessionError || !session || !session.user) {
+                    alert("Sessão inválida ou encerrada. Realize o login novamente.");
                     window.location.href = "login.html";
                     return;
                 }
 
-                // Inserção com mapeamento estrito para as colunas: title, description, price_estimate, buyer_id e status
+                // Correção Estrutural: payload enviado diretamente como Objeto conforme especificação técnica da SDK v2
                 const { data, error } = await meuSupabaseClient
                     .from('purchase_requests')
-                    .insert([
-                        { 
-                            title: produto, 
-                            description: detalhes, 
-                            price_estimate: valor ? parseFloat(valor) : 0, 
-                            buyer_id: session.user.id,
-                            status: 'open'
-                        }
-                    ]);
+                    .insert({ 
+                        title: produto, 
+                        description: detalhes, 
+                        price_estimate: precoEstimado, 
+                        buyer_id: session.user.id,
+                        status: 'open'
+                    });
 
                 if (error) throw error;
 
@@ -201,8 +202,8 @@
                 window.location.href = "meus-pedidos.html";
 
             } catch (error) {
-                console.error('Erro na gravação:', error.message);
-                alert("Erro ao salvar produto: " + error.message);
+                console.error('[Supabase Runtime Error]:', error.message);
+                alert("Falha operacional ao persistir registro: " + error.message);
             }
         }
 
@@ -211,6 +212,7 @@
             window.location.href = "login.html";
         }
 
+        // Vinculação dos listeners ao ciclo de execução da Janela
         document.getElementById('form-pedido').addEventListener('submit', publicarPedido);
         window.onload = verificarSessao;
     </script>
