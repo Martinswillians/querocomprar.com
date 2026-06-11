@@ -174,13 +174,12 @@
             try {
                 let userId = null;
 
-                // Camada 1: Validação via sessão ativa em cache
+                // Captura do ID do usuário autenticado através do estado da sessão ativa
                 const { data: sessionData } = await meuSupabaseClient.auth.getSession();
                 if (sessionData && sessionData.session && sessionData.session.user) {
                     userId = sessionData.session.user.id;
                 }
 
-                // Camada 2: Fallback direto no servidor de autenticação do Supabase
                 if (!userId) {
                     const { data: userData } = await meuSupabaseClient.auth.getUser();
                     if (userData && userData.user) {
@@ -188,21 +187,19 @@
                     }
                 }
 
-                // Bloqueio preventivo local caso a sessão tenha caído
                 if (!userId) {
-                    alert("Sessão expirada ou inválida. Por favor, realize o login novamente.");
+                    alert("Sessão expirada. Por favor, efetue o login novamente.");
                     window.location.href = "login.html";
                     return;
                 }
 
-                // Gravação com mapeamento redundante completo aceito pela base de dados
+                // Inserção estrita mapeada exatamente com as colunas reais presentes na tabela do banco
                 const { data, error } = await meuSupabaseClient
                     .from('purchase_requests')
                     .insert([
                         { 
                             title: produto, 
                             description: detalhes, 
-                            price: valorNumerico,
                             price_estimate: valorNumerico,
                             buyer_id: userId,
                             status: 'open'
@@ -215,7 +212,7 @@
                 window.location.href = "meus-pedidos.html";
 
             } catch (error) {
-                console.error('Erro na transação de dados:', error.message);
+                console.error('Erro de persistência:', error.message);
                 alert("Erro ao salvar produto: " + error.message);
             }
         }
