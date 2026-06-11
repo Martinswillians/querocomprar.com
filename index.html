@@ -157,12 +157,11 @@
 
     <script>
         const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
-        const SUPABASE_ANON_KEY = "sb_publishable_guT8FKUn87-uqtFWkIBGjA_3pfXwsZN";
+        // CHAVE CORRIGIDA COM BASE NA SUA ABA DE API KEYS
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmhicXRnb2lrY2Fya2tqaHVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk5MzMsImV4cCI6MjA5NjY4NTkzM30._qpYBCfDMWg51pF2MQgi4_FwTW535PW2tpncNFoGXns";
         
-        // Instanciação segura para evitar conflito com a palavra reservada 'supabase'
         const meuSupabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // Bloqueia a página se o usuário não estiver autenticado
         async function verificarSessao() {
             const { data: { session } } = await meuSupabaseClient.auth.getSession();
             if (!session) {
@@ -170,7 +169,6 @@
             }
         }
 
-        // Função para cadastrar o produto no banco de dados
         async function publicarPedido(event) {
             event.preventDefault();
             
@@ -187,7 +185,6 @@
                     return;
                 }
 
-                // Insere os dados na tabela correspondente do Supabase
                 const { data, error } = await meuSupabaseClient
                     .from('purchase_requests')
                     .insert([
@@ -211,13 +208,11 @@
             }
         }
 
-        // Função de Logout
         async function logout() {
             await meuSupabaseClient.auth.signOut();
             window.location.href = "login.html";
         }
 
-        // Vincula os eventos às funções correspondentes
         document.getElementById('form-pedido').addEventListener('submit', publicarPedido);
         window.onload = verificarSessao;
     </script>
