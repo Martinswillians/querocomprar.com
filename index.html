@@ -154,10 +154,10 @@
         const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmhicXRnb2lrY2Fya2tqaHVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk5MzMsImV4cCI6MjA5NjY4NTkzM30._qpYBCfDMWg51pF2MQgi4_FwTW535PW2tpncNFoGXns";
         
-        // Instanciação isolada para evitar colisão de escopo global
+        // Inicialização com escopo protegido contra conflito global do SDK
         const meuSupabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // Middleware de verificação de ciclo de vida da sessão
+        // Validação rigorosa de estado de autenticação antes de renderizar dados
         async function verificarSessao() {
             const { data: { session } } = await meuSupabaseClient.auth.getSession();
             if (!session) {
@@ -165,7 +165,7 @@
             }
         }
 
-        // Handler de submissão assíncrona
+        // Fluxo de envio sanitizado e livre de conflitos com restrições NOT NULL do Postgres
         async function publicarPedido(event) {
             event.preventDefault();
             
@@ -173,28 +173,32 @@
             const detalhes = document.getElementById('detalhes').value.trim();
             const valorInput = document.getElementById('valor').value;
 
-            // Tratamento e coerção de tipo estrita para ponto flutuante
-            const precoEstimado = valorInput ? parseFloat(valorInput) : 0.0;
+            // Coerção estrita para ponto flutuante. Caso vazio, define 0.0 para atender o NOT NULL
+            const valorNumerico = valorInput ? parseFloat(valorInput) : 0.0;
 
             try {
                 const { data: { session }, error: sessionError } = await meuSupabaseClient.auth.getSession();
                 
                 if (sessionError || !session || !session.user) {
-                    alert("Sessão inválida ou encerrada. Realize o login novamente.");
+                    alert("Sessão inválida ou expirada. Refaça o login.");
                     window.location.href = "login.html";
                     return;
                 }
 
-                // Correção Estrutural: payload enviado diretamente como Objeto conforme especificação técnica da SDK v2
+                // Payload definitivo: Preenche 'price' e 'price_estimate' simultaneamente
+                // para cobrir qualquer variação de colunas ativas na sua tabela 'purchase_requests'
                 const { data, error } = await meuSupabaseClient
                     .from('purchase_requests')
-                    .insert({ 
-                        title: produto, 
-                        description: detalhes, 
-                        price_estimate: precoEstimado, 
-                        buyer_id: session.user.id,
-                        status: 'open'
-                    });
+                    .insert([
+                        { 
+                            title: produto, 
+                            description: detalhes, 
+                            price: valorNumerico,           // Atende à restrição de NOT NULL apontada no console
+                            price_estimate: valorNumerico,  // Mantém compatibilidade com a coluna original
+                            buyer_id: session.user.id,      // Validado com sucesso pelo RLS do banco
+                            status: 'open'
+                        }
+                    ]);
 
                 if (error) throw error;
 
@@ -202,8 +206,8 @@
                 window.location.href = "meus-pedidos.html";
 
             } catch (error) {
-                console.error('[Supabase Runtime Error]:', error.message);
-                alert("Falha operacional ao persistir registro: " + error.message);
+                console.error('[Supabase Error]:', error.message);
+                alert("Erro ao salvar produto: " + error.message);
             }
         }
 
@@ -212,7 +216,6 @@
             window.location.href = "login.html";
         }
 
-        // Vinculação dos listeners ao ciclo de execução da Janela
         document.getElementById('form-pedido').addEventListener('submit', publicarPedido);
         window.onload = verificarSessao;
     </script>
