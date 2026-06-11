@@ -14,6 +14,8 @@
             flex-direction: column;
             align-items: center;
         }
+
+        /* Menu Superior */
         .nav-container {
             width: 100%;
             max-width: 500px;
@@ -22,12 +24,14 @@
             align-items: center;
             margin-bottom: 20px;
         }
+
         .btn-link {
             text-decoration: none;
             color: #007bff;
             font-weight: bold;
             font-size: 14px;
         }
+
         .btn-sair {
             background-color: #dc3545;
             color: white;
@@ -39,9 +43,12 @@
             cursor: pointer;
             width: 60%;
         }
+
         .btn-sair:hover {
             background-color: #c82333;
         }
+
+        /* Card do Formulário */
         .card {
             background-color: white;
             padding: 30px;
@@ -51,26 +58,31 @@
             max-width: 500px;
             box-sizing: border-box;
         }
+
         h2 {
             margin-top: 0;
             margin-bottom: 10px;
             font-size: 24px;
             color: #000;
         }
+
         p {
             color: #333;
             font-size: 14px;
             margin-bottom: 20px;
         }
+
         .form-group {
             margin-bottom: 20px;
         }
+
         label {
             display: block;
             font-weight: bold;
             margin-bottom: 5px;
             color: #000;
         }
+
         input[type="text"],
         input[type="number"],
         textarea {
@@ -82,10 +94,12 @@
             font-size: 14px;
             color: #333;
         }
+
         textarea {
             resize: vertical;
             height: 100px;
         }
+
         .btn-submit {
             background-color: #007bff;
             color: white;
@@ -97,6 +111,7 @@
             cursor: pointer;
             width: 100%;
         }
+
         .btn-submit:hover {
             background-color: #0056b3;
         }
@@ -134,12 +149,15 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <script>
         const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmhicXRnb2lrY2Fya2tqaHVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk5MzMsImV4cCI6MjA5NjY4NTkzM30._qpYBCfDMWg51pF2MQgi4_FwTW535PW2tpncNFoGXns";
         
+        // Inicialização protegida contra erros de Syntax global
         const meuSupabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+        // Bloqueia acesso front-end se não estiver logado
         async function verificarSessao() {
             const { data: { session } } = await meuSupabaseClient.auth.getSession();
             if (!session) {
@@ -147,6 +165,7 @@
             }
         }
 
+        // Função corrigida para bater exatamente com as colunas do seu banco de dados
         async function publicarPedido(event) {
             event.preventDefault();
             
@@ -163,14 +182,15 @@
                     return;
                 }
 
+                // INSERÇÃO CORRIGIDA: mapeando 'user_id' e 'price' conforme a estrutura real da sua tabela
                 const { data, error } = await meuSupabaseClient
                     .from('purchase_requests')
                     .insert([
                         { 
                             title: produto, 
                             description: detalhes, 
-                            price: valor ? parseFloat(valor) : 0, 
-                            buyer_id: session.user.id,
+                            price: valor ? parseFloat(valor) : 0,
+                            user_id: session.user.id, // CORREÇÃO AQUI: Mudado de buyer_id para user_id
                             status: 'open'
                         }
                     ]);
@@ -181,7 +201,7 @@
                 window.location.href = "meus-pedidos.html";
 
             } catch (error) {
-                console.error('Erro ao publicar:', error.message);
+                console.error('Erro ao salvar:', error.message);
                 alert("Erro ao salvar produto: " + error.message);
             }
         }
