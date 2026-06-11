@@ -3,201 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Querocomprar.com - Meus Pedidos</title>
+    <title>Querocomprar.com - Minhas Demandas</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             background-color: #f4f4f4;
-            margin: 20px;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-        }
-        .header-nav {
+        .header-container {
+            width: 100%;
+            max-width: 600px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
         }
         .btn-voltar {
             text-decoration: none;
             color: #007bff;
             font-weight: bold;
+            font-size: 16px;
         }
-        
-        .pedido-card {
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-            border-left: 5px solid #007bff;
+        h2 {
+            margin: 0;
+            color: #000;
+            font-size: 24px;
         }
-        .pedido-title {
-            margin: 0 0 10px 0;
-            color: #333;
-            font-size: 22px;
-        }
-        .pedido-desc {
-            color: #666;
-            margin-bottom: 15px;
-        }
-
-        .ofertas-container {
-            margin-top: 20px;
-            border-top: 1px solid #eee;
-            padding-top: 20px;
-        }
-        .oferta-item {
-            background: #f9f9f9;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
+        .lista-pedidos {
+            width: 100%;
+            max-width: 600px;
             display: flex;
-            gap: 20px;
-            border: 1px solid #eee;
+            flex-direction: column;
+            gap: 15px;
         }
-        .oferta-img {
-            width: 150px;
-            height: 150px;
-            object-fit: cover;
-            border-radius: 6px;
-            border: 1px solid #ddd;
+        .pedido-card {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-sizing: border-box;
         }
-        .oferta-info {
-            flex: 1;
-        }
-        .price {
-            font-size: 20px;
+        .pedido-titulo {
+            font-size: 18px;
             font-weight: bold;
-            color: #2ecc71;
-            margin-bottom: 8px;
+            color: #007bff;
+            margin-bottom: 5px;
         }
-        .vendedor-desc {
+        .pedido-detalhes {
             font-size: 14px;
-            color: #444;
-            line-height: 1.4;
+            color: #333;
+            margin-bottom: 10px;
         }
-        
-        .no-offers {
-            font-style: italic;
-            color: #999;
-            font-size: 14px;
+        .pedido-valor {
+            font-size: 15px;
+            font-weight: bold;
+            color: #28a745;
         }
-        .loading {
-            text-align: center;
-            padding: 50px;
+        .sem-pedidos {
             color: #666;
-        }
-        .badge-count {
-            background: #007bff;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 12px;
+            font-size: 16px;
+            text-align: center;
+            margin-top: 40px;
         }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="header-nav">
+    <div class="header-container">
         <a href="index.html" class="btn-voltar">← Novo Pedido</a>
         <h2>Minhas Demandas</h2>
-        <span id="user-email" style="font-size: 12px; color: #888;"></span>
     </div>
 
-    <div id="lista-pedidos">
-        <p class="loading">Buscando seus pedidos e ofertas...</p>
+    <div class="lista-pedidos" id="container-demandas">
+        <div class="sem-pedidos" id="status-loading">Buscando seus pedidos e ofertas...</div>
     </div>
-</div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-<script>
-    const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
-    // CHAVE CORRIGIDA COM BASE NA SUA ABA DE API KEYS
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmhicXRnb2lrY2Fya2tqaHVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk5MzMsImV4cCI6MjA5NjY4NTkzM30._qpYBCfDMWg51pF2MQgi4_FwTW535PW2tpncNFoGXns";
-    
-    const meuSupabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    let currentBuyerId = null;
-
-    async function verificarSessao() {
-        const { data: { session }, error } = await meuSupabaseClient.auth.getSession();
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmhicXRnb2lrY2Fya2tqaHVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk5MzMsImV4cCI6MjA5NjY4NTkzM30._qpYBCfDMWg51pF2MQgi4_FwTW535PW2tpncNFoGXns";
         
-        if (error || !session) {
-            alert("Sua sessão expirou ou você não está logado.");
-            window.location.href = "login.html";
-            return;
-        }
-        
-        currentBuyerId = session.user.id;
-        document.getElementById('user-email').innerText = session.user.email;
-        carregarMeusPedidos();
-    }
+        const meuSupabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    async function carregarMeusPedidos() {
-        try {
-            const { data: pedidos, error } = await meuSupabaseClient
-                .from('purchase_requests')
-                .select('*, seller_offers(*)')
-                .eq('buyer_id', currentBuyerId)
-                .order('created_at', { ascending: false });
+        async function carregarMeusPedidos() {
+            const container = document.getElementById('container-demandas');
+            const loadingStatus = document.getElementById('status-loading');
 
-            if (error) throw error;
-
-            const container = document.getElementById('lista-pedidos');
-            container.innerHTML = '';
-
-            if (pedidos.length === 0) {
-                container.innerHTML = '<p class="loading">Você ainda não enviou nenhum pedido de compra.</p>';
-                return;
-            }
-
-            pedidos.forEach(pedido => {
-                const divPedido = document.createElement('div');
-                divPedido.className = 'pedido-card';
+            try {
+                const { data: { session } } = await meuSupabaseClient.auth.getSession();
                 
-                let html = `
-                    <h3 class="pedido-title">${pedido.title} <span class="badge-count">${pedido.seller_offers ? pedido.seller_offers.length : 0} ofertas</span></h3>
-                    <p class="pedido-desc">${pedido.description}</p>
-                    <div class="ofertas-container">
-                `;
-
-                if (!pedido.seller_offers || pedido.seller_offers.length === 0) {
-                    html += `<p class="no-offers">Aguardando propostas de vendedores...</p>`;
-                } else {
-                    pedido.seller_offers.forEach(oferta => {
-                        const imgUrl = (oferta.images_urls && oferta.images_urls.length > 0) 
-                                       ? oferta.images_urls[0] 
-                                       : 'https://via.placeholder.com/150?text=Sem+Foto';
-
-                        html += `
-                            <div class="oferta-item">
-                                <img src="${imgUrl}" class="oferta-img" alt="Foto do produto">
-                                <div class="oferta-info">
-                                    <div class="price">R$ ${oferta.price.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
-                                    <p class="vendedor-desc"><strong>Vendedor diz:</strong> ${oferta.description}</p>
-                                </div>
-                            </div>
-                        `;
-                    });
+                if (!session) {
+                    window.location.href = "login.html";
+                    return;
                 }
 
-                html += `</div>`;
-                divPedido.innerHTML = html;
-                container.appendChild(divPedido);
-            });
+                // Busca as requisições vinculadas unicamente ao usuário logado
+                const { data: pedidos, error } = await meuSupabaseClient
+                    .from('purchase_requests')
+                    .select('*')
+                    .eq('buyer_id', session.user.id)
+                    .order('created_at', { ascending: false });
 
-        } catch (error) {
-            console.error('Erro na requisição:', error.message);
-            document.getElementById('lista-pedidos').innerHTML = '<p class="loading">Erro ao carregar seus dados no banco.</p>';
+                if (error) throw error;
+
+                if (!pedidos || pedidos.length === 0) {
+                    container.innerHTML = `<div class="sem-pedidos">Você ainda não publicou nenhuma demanda.</div>`;
+                    return;
+                }
+
+                // Limpa o indicador de carregamento
+                container.innerHTML = '';
+
+                // Monta a listagem dinâmica na tela
+                pedidos.forEach(pedido => {
+                    const card = document.createElement('div');
+                    card.className = 'pedido-card';
+                    
+                    const valorFormatado = pedido.price ? parseFloat(pedido.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00';
+
+                    card.innerHTML = `
+                        <div class="pedido-titulo">${pedido.title}</div>
+                        <div class="pedido-detalhes">${pedido.description}</div>
+                        <div class="pedido-valor">Preço Alvo: ${valorFormatado}</div>
+                    `;
+                    container.appendChild(card);
+                });
+
+            } catch (error) {
+                console.error('Erro ao carregar demandas:', error.message);
+                container.innerHTML = `<div class="sem-pedidos" style="color:red;">Erro ao carregar os dados: ${error.message}</div>`;
+            }
         }
-    }
 
-    window.onload = verificarSessao;
-</script>
+        window.onload = carregarMeusPedidos;
+    </script>
 </body>
 </html>

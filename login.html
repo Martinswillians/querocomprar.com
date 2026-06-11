@@ -3,88 +3,170 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Querocomprar.com - Entrar / Cadastrar</title>
+    <title>Querocomprar.com - Login</title>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #f4f4f4; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .login-box { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
-        h2 { text-align: center; color: #333; margin-bottom: 20px; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        .btn-container { display: flex; gap: 10px; margin-top: 20px; }
-        button { flex: 1; padding: 10px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
-        .btn-login { background-color: #3483fa; color: white; }
-        .btn-signup { background-color: #2ecc71; color: white; }
-        button:hover { opacity: 0.9; }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .card {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            box-sizing: border-box;
+            text-align: center;
+        }
+        h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #000;
+        }
+        input[type="email"],
+        input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        .btn-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .btn-entrar {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            flex: 1;
+        }
+        .btn-entrar:hover {
+            background-color: #0056b3;
+        }
+        .btn-cadastrar {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            flex: 1;
+        }
+        .btn-cadastrar:hover {
+            background-color: #218838;
+        }
     </style>
 </head>
 <body>
 
-<div class="login-box">
-    <h2>Querocomprar.com</h2>
-    <form id="authForm">
-        <div class="form-group">
-            <label for="email">E-mail:</label>
-            <input type="email" id="email" required placeholder="seuemail@exemplo.com">
-        </div>
-        <div class="form-group">
-            <label for="password">Senha:</label>
-            <input type="password" id="password" required placeholder="Sua senha">
-        </div>
+    <div class="card">
+        <h2>Querocomprar.com</h2>
+        <form id="form-login" onsubmit="event.preventDefault();">
+            <div class="form-group">
+                <label for="email">E-mail:</label>
+                <input type="email" id="email" placeholder="seuemail@exemplo.com" required>
+            </div>
+            <div class="form-group">
+                <label for="senha">Senha:</label>
+                <input type="password" id="senha" placeholder="******" required>
+            </div>
+            <div class="btn-container">
+                <button type="button" class="btn-entrar" id="btn-login">Entrar</button>
+                <button type="button" class="btn-cadastrar" id="btn-cadastro">Cadastrar Novo</button>
+            </div>
+        </form>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmhicXRnb2lrY2Fya2tqaHVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk5MzMsImV4cCI6MjA5NjY4NTkzM30._qpYBCfDMWg51pF2MQgi4_FwTW535PW2tpncNFoGXns";
         
-        <div class="btn-container">
-            <button type="button" class="btn-login" id="btnLogin">Entrar</button>
-            <button type="button" class="btn-signup" id="btnSignup">Cadastrar Novo</button>
-        </div>
-    </form>
-</div>
+        // Uso de variável customizada estável para evitar conflito global
+        const meuSupabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+        async function logarUsuario() {
+            const email = document.getElementById('email').value;
+            const senha = document.getElementById('senha').value;
 
-<script>
-    const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_guT8FKUn87-uqtFWkIBGjA_3pfXwsZN";
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            if(!email || !senha) {
+                alert("Por favor, preencha todos os campos.");
+                return;
+            }
 
-    const emailInput = document.getElementById('email');
-    const passwordInput = document.getElementById('password');
+            try {
+                const { data, error } = await meuSupabaseClient.auth.signInWithPassword({
+                    email: email,
+                    password: senha
+                });
 
-    // FUNÇÃO: LOGAR USUÁRIO
-    document.getElementById('btnLogin').addEventListener('click', async () => {
-        const email = emailInput.value;
-        const password = passwordInput.value;
+                if (error) throw error;
 
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email: email,
-            password: password,
-        });
-
-        if (error) {
-            alert("Erro no login: " + error.message);
-        } else {
-            alert("Login efetuado com sucesso!");
-            // Redireciona o vendedor para o painel de vendas
-            window.location.href = "vendedor.html"; 
+                alert("Login efetuado com sucesso!");
+                
+                // Direcionamento dinâmico: Se o e-mail contiver 'vendedor', envia para vendedor.html, caso contrário envia para index.html
+                if (email.toLowerCase().includes('vendedor')) {
+                    window.location.href = "vendedor.html";
+                } else {
+                    window.location.href = "index.html";
+                }
+            } catch (error) {
+                console.error("Erro no login:", error.message);
+                alert("Erro no login: " + error.message);
+            }
         }
-    });
 
-    // FUNÇÃO: CADASTRAR NOVO USUÁRIO
-    document.getElementById('btnSignup').addEventListener('click', async () => {
-        const email = emailInput.value;
-        const password = passwordInput.value;
+        async function cadastrarUsuario() {
+            const email = document.getElementById('email').value;
+            const senha = document.getElementById('senha').value;
 
-        const { data, error } = await supabase.auth.signUp({
-            email: email,
-            password: password,
-        });
+            if(!email || !senha) {
+                alert("Por favor, preencha os campos para realizar o cadastro.");
+                return;
+            }
 
-        if (error) {
-            alert("Erro no cadastro: " + error.message);
-        } else {
-            alert("Cadastro realizado! Se o 'Confirm Email' estiver ativo, verifique sua caixa de entrada.");
+            try {
+                const { data, error } = await meuSupabaseClient.auth.signUp({
+                    email: email,
+                    password: senha
+                });
+
+                if (error) throw error;
+                alert("Cadastro realizado! Verifique seu e-mail caso a confirmação esteja ativada ou tente fazer login.");
+            } catch (error) {
+                console.error("Erro no cadastro:", error.message);
+                alert("Erro no cadastro: " + error.message);
+            }
         }
-    });
-</script>
 
+        document.getElementById('btn-login').addEventListener('click', logarUsuario);
+        document.getElementById('btn-cadastro').addEventListener('click', cadastrarUsuario);
+    </script>
 </body>
 </html>
