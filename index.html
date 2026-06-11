@@ -157,8 +157,9 @@
         const meuSupabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         async function verificarSessao() {
-            const { data: { session } } = await meuSupabaseClient.auth.getSession();
-            if (!session) {
+            const { data: { session }, error } = await meuSupabaseClient.auth.getSession();
+            if (error || !session) {
+                localStorage.clear();
                 window.location.href = "login.html";
             }
         }
@@ -172,28 +173,16 @@
             const valorNumerico = valorInput ? parseFloat(valorInput) : 0.0;
 
             try {
-                let userId = null;
-
-                // Captura do ID do usuário autenticado através do estado da sessão ativa
-                const { data: sessionData } = await meuSupabaseClient.auth.getSession();
-                if (sessionData && sessionData.session && sessionData.session.user) {
-                    userId = sessionData.session.user.id;
+                // Obtém a sessão atualizada para garantir o ID do usuário
+                const { data: sessionData, error: sessionError } = await meuSupabaseClient.auth.getSession();
+                
+                if (sessionError || !sessionData || !sessionData.session) {
+                    throw new Error("Sessão expirada. Faça login novamente.");
                 }
 
-                if (!userId) {
-                    const { data: userData } = await meuSupabaseClient.auth.getUser();
-                    if (userData && userData.user) {
-                        userId = userData.user.id;
-                    }
-                }
+                const userId = sessionData.session.user.id;
 
-                if (!userId) {
-                    alert("Sessão expirada. Por favor, efetue o login novamente.");
-                    window.location.href = "login.html";
-                    return;
-                }
-
-                // Inserção estrita mapeada exatamente com as colunas reais presentes na tabela do banco
+                // Executa a inserção mapeada estritamente com os campos reais da tabela
                 const { data, error } = await meuSupabaseClient
                     .from('purchase_requests')
                     .insert([
@@ -213,12 +202,21 @@
 
             } catch (error) {
                 console.error('Erro de persistência:', error.message);
-                alert("Erro ao salvar produto: " + error.message);
+                
+                // Trata especificamente o erro de token corrompido ou inválido do Supabase (JWTInvalid / PGRST301)
+                if (error.message.includes("JWT") || error.code === "PGRST301") {
+                    alert("Sua sessão de login tornou-se inválida devido a testes anteriores. Você será redirecionado para realizar um novo login limpo.");
+                    localStorage.clear();
+                    window.location.href = "login.html";
+                } else {
+                    alert("Erro ao salvar produto: " + error.message);
+                }
             }
         }
 
         async function logout() {
             await meuSupabaseClient.auth.signOut();
+            localStorage.clear();
             window.location.href = "login.html";
         }
 
