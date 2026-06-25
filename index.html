@@ -1,229 +1,3656 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Querocomprar.com - Publicar Pedido</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
+  <!-- 
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  SUPABASE — SQL NECESSÁRIO (execute no SQL Editor)          ║
+  ╚══════════════════════════════════════════════════════════════╝
 
-        .nav-container {
-            width: 100%;
-            max-width: 500px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
+  -- 1. Colunas extras na tabela wishes
+  ALTER TABLE wishes ADD COLUMN IF NOT EXISTS views integer DEFAULT 0;
+  ALTER TABLE wishes ADD COLUMN IF NOT EXISTS offers integer DEFAULT 0;
+  ALTER TABLE wishes ADD COLUMN IF NOT EXISTS closed boolean DEFAULT false;
 
-        .btn-link {
-            text-decoration: none;
-            color: #007bff;
-            font-weight: bold;
-            font-size: 14px;
-        }
+  -- 2. Coluna data (JSON) para mensagens ricas (fotos, ofertas)
+  ALTER TABLE messages ADD COLUMN IF NOT EXISTS data jsonb;
 
-        .btn-sair {
-            background-color: #dc3545;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            font-size: 14px;
-            font-weight: bold;
-            border-radius: 4px;
-            cursor: pointer;
-            width: 40%;
-        }
+  -- 3. Row Level Security — permitir leitura pública dos wishes e profiles
+  ALTER TABLE wishes    ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE profiles  ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE messages  ENABLE ROW LEVEL SECURITY;
 
-        .btn-sair:hover {
-            background-color: #c82333;
-        }
+  -- Wishes: qualquer um pode ler; só o dono pode inserir/atualizar/deletar
+  CREATE POLICY "wishes_select_all"  ON wishes FOR SELECT USING (true);
+  CREATE POLICY "wishes_insert_own"  ON wishes FOR INSERT WITH CHECK (auth.uid() = user_id);
+  CREATE POLICY "wishes_update_own"  ON wishes FOR UPDATE USING (auth.uid() = user_id);
+  CREATE POLICY "wishes_delete_own"  ON wishes FOR DELETE USING (auth.uid() = user_id);
 
-        .card {
-            background-color: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            width: 100%;
-            max-width: 500px;
-            box-sizing: border-box;
-        }
+  -- Profiles: qualquer um pode ler; só o dono pode inserir/atualizar
+  CREATE POLICY "profiles_select_all" ON profiles FOR SELECT USING (true);
+  CREATE POLICY "profiles_insert_own" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
+  CREATE POLICY "profiles_update_own" ON profiles FOR UPDATE USING (auth.uid() = id);
 
-        h2 {
-            margin-top: 0;
-            margin-bottom: 10px;
-            font-size: 24px;
-            color: #000;
-        }
+  -- Conversations: participantes podem ler/inserir
+  CREATE POLICY "convs_select" ON conversations FOR SELECT USING (auth.uid() = buyer_id OR auth.uid() = seller_id);
+  CREATE POLICY "convs_insert" ON conversations FOR INSERT WITH CHECK (auth.uid() = seller_id);
 
-        p {
-            color: #333;
-            font-size: 14px;
-            margin-bottom: 20px;
-        }
+  -- Messages: participantes da conversa podem ler/inserir
+  CREATE POLICY "msgs_select" ON messages FOR SELECT USING (
+    EXISTS (SELECT 1 FROM conversations c WHERE c.id = conversation_id AND (c.buyer_id = auth.uid() OR c.seller_id = auth.uid()))
+  );
+  CREATE POLICY "msgs_insert" ON messages FOR INSERT WITH CHECK (auth.uid() = sender_id);
 
-        .form-group {
-            margin-bottom: 20px;
-        }
+  -- 4. Realtime — habilitar para messages
+  ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+-->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>querocomprar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box
+    }
 
-        label {
-            display: block;
-            font-weight: bold;
-            margin-bottom: 5px;
-            color: #000;
-        }
+    :root {
+      --g: #1D9E75;
+      --gl: #E1F5EE;
+      --gd: #085041;
+      --gm: #5DCAA5;
+      --a: #BA7517;
+      --al: #FAEEDA;
+      --c: #D85A30;
+      --cl: #FAECE7;
+      --b: #378ADD;
+      --bl: #E8F2FC;
+      --bg: #F0EEE7;
+      --bd: #D3D1C7;
+      --tx: #2C2C2A;
+      --txm: #5F5E5A;
+      --txl: #888780;
+      --dk: #1C1C1A;
+      --r: 10px;
+    }
 
-        input[type="text"],
-        input[type="number"],
-        textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
-            font-size: 14px;
-            color: #333;
-        }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--tx);
+      min-height: 100vh;
+      font-size: 15px
+    }
 
-        textarea {
-            resize: vertical;
-            height: 100px;
-        }
+    button,
+    input,
+    select,
+    textarea {
+      font-family: inherit
+    }
 
-        .btn-submit {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            padding: 12px;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 4px;
-            cursor: pointer;
-            width: 100%;
-        }
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--bd) transparent
+    }
 
-        .btn-submit:hover {
-            background-color: #0056b3;
-        }
-    </style>
+    nav {
+      background: var(--dk);
+      height: 56px;
+      display: flex;
+      align-items: center;
+      padding: 0 1.5rem;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 300
+    }
+
+    .logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.3rem;
+      color: #fff;
+      letter-spacing: -.5px;
+      cursor: pointer;
+      text-decoration: none
+    }
+
+    .logo em {
+      color: var(--g);
+      font-style: normal
+    }
+
+    .nsearch {
+      flex: 1;
+      max-width: 320px;
+      position: relative;
+      margin-left: auto
+    }
+
+    .nsearch input {
+      width: 100%;
+      background: rgba(255, 255, 255, .08);
+      border: 1px solid rgba(255, 255, 255, .12);
+      color: #fff;
+      border-radius: 20px;
+      padding: 7px 14px 7px 34px;
+      font-size: 13px;
+      outline: none;
+      transition: .2s
+    }
+
+    .nsearch input::placeholder {
+      color: rgba(255, 255, 255, .35)
+    }
+
+    .nsearch input:focus {
+      background: rgba(255, 255, 255, .13);
+      border-color: var(--gm)
+    }
+
+    .nsearch .si {
+      position: absolute;
+      left: 11px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: rgba(255, 255, 255, .4);
+      font-size: 15px;
+      pointer-events: none
+    }
+
+    .sdrop {
+      display: none;
+      position: absolute;
+      top: 40px;
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: .5px solid var(--bd);
+      border-radius: 10px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, .13);
+      z-index: 400;
+      max-height: 280px;
+      overflow-y: auto
+    }
+
+    .sdrop.on {
+      display: block
+    }
+
+    .sitem {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: .65rem .9rem;
+      cursor: pointer;
+      border-bottom: .5px solid var(--bd);
+      transition: .15s
+    }
+
+    .sitem:hover {
+      background: var(--bg)
+    }
+
+    .sitem:last-child {
+      border-bottom: none
+    }
+
+    .nbtn {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, .2);
+      color: #fff;
+      padding: 5px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: .2s
+    }
+
+    .nbtn:hover {
+      background: rgba(255, 255, 255, .1)
+    }
+
+    .nbtn.p {
+      background: var(--g);
+      border-color: var(--g)
+    }
+
+    .nbtn.p:hover {
+      background: var(--gd)
+    }
+
+    .upill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, .08);
+      border-radius: 20px;
+      padding: 4px 12px 4px 4px;
+      cursor: pointer;
+      border: 1px solid rgba(255, 255, 255, .1);
+      transition: .2s
+    }
+
+    .upill:hover {
+      background: rgba(255, 255, 255, .15)
+    }
+
+    .av {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+      color: #fff;
+      flex-shrink: 0
+    }
+
+    .uname {
+      font-size: 13px;
+      color: #fff
+    }
+
+    .nbadge {
+      background: var(--c);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 8px;
+      padding: 1px 7px;
+      margin-left: 3px
+    }
+
+    .navico {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: rgba(255, 255, 255, .6);
+      font-size: 20px;
+      padding: 4px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      transition: .2s
+    }
+
+    .navico:hover {
+      color: #fff
+    }
+
+    .navico .ndot {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--c);
+      border: 1.5px solid var(--dk)
+    }
+
+    .notif-panel {
+      position: fixed;
+      top: 56px;
+      right: 12px;
+      width: 320px;
+      background: #fff;
+      border: .5px solid var(--bd);
+      border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, .15);
+      z-index: 500;
+      display: none;
+      max-height: 440px;
+      overflow-y: auto
+    }
+
+    .notif-panel.on {
+      display: block
+    }
+
+    .np-hd {
+      padding: .9rem 1rem;
+      border-bottom: .5px solid var(--bd);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: .95rem;
+      position: sticky;
+      top: 0;
+      background: #fff
+    }
+
+    .np-all {
+      font-size: 12px;
+      color: var(--g);
+      cursor: pointer;
+      font-weight: 400
+    }
+
+    .ni {
+      display: flex;
+      gap: .8rem;
+      padding: .85rem 1rem;
+      border-bottom: .5px solid var(--bd);
+      cursor: pointer;
+      transition: .15s
+    }
+
+    .ni:hover {
+      background: var(--bg)
+    }
+
+    .ni.unread {
+      background: #f4fff9
+    }
+
+    .niico {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0
+    }
+
+    .nitxt {
+      font-size: 13px;
+      line-height: 1.4
+    }
+
+    .nitime {
+      font-size: 11px;
+      color: var(--txl);
+      margin-top: 2px
+    }
+
+    .scr {
+      display: none;
+      min-height: calc(100vh - 56px)
+    }
+
+    .scr.on {
+      display: block
+    }
+
+    .auth-bg {
+      min-height: calc(100vh - 56px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      background: radial-gradient(ellipse at 65% 35%, #d3f5e8, var(--bg) 58%)
+    }
+
+    .acard {
+      background: #fff;
+      border-radius: 14px;
+      padding: 2.3rem;
+      width: 100%;
+      max-width: 390px;
+      border: .5px solid var(--bd);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, .07)
+    }
+
+    .atitle {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.45rem;
+      margin-bottom: .3rem
+    }
+
+    .asub {
+      font-size: 13px;
+      color: var(--txm);
+      margin-bottom: 1.6rem
+    }
+
+    .role-tabs {
+      display: flex;
+      gap: 7px;
+      margin-bottom: 1.5rem
+    }
+
+    .rtab {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid var(--bd);
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--txm);
+      background: #fff;
+      cursor: pointer;
+      transition: .2s
+    }
+
+    .rtab.on {
+      background: var(--gl);
+      border-color: var(--g);
+      color: var(--gd)
+    }
+
+    .fld {
+      margin-bottom: 1rem
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 5px
+    }
+
+    input[type=text],
+    input[type=email],
+    input[type=password],
+    input[type=number],
+    select,
+    textarea {
+      width: 100%;
+      padding: 10px 13px;
+      border: 1px solid var(--bd);
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: .2s;
+      background: #fff;
+      color: var(--tx)
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--g);
+      box-shadow: 0 0 0 3px rgba(29, 158, 117, .08)
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 78px;
+      line-height: 1.5
+    }
+
+    .fld2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .9rem;
+      margin-bottom: 1rem
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 500;
+      font-size: 14px;
+      border: none;
+      cursor: pointer;
+      transition: .2s;
+      white-space: nowrap
+    }
+
+    .btn.full {
+      width: 100%
+    }
+
+    .btn.g {
+      background: var(--g);
+      color: #fff
+    }
+
+    .btn.g:hover {
+      background: var(--gd)
+    }
+
+    .btn.out {
+      background: transparent;
+      border: 1px solid var(--bd);
+      color: var(--tx)
+    }
+
+    .btn.out:hover {
+      background: var(--bg)
+    }
+
+    .btn.sm {
+      padding: 6px 13px;
+      font-size: 13px
+    }
+
+    .btn.xs {
+      padding: 4px 10px;
+      font-size: 12px
+    }
+
+    .btn:disabled {
+      opacity: .45;
+      cursor: not-allowed
+    }
+
+    .aswitch {
+      text-align: center;
+      margin-top: 1rem;
+      font-size: 13px;
+      color: var(--txm)
+    }
+
+    .aswitch a {
+      color: var(--g);
+      cursor: pointer;
+      font-weight: 500
+    }
+
+    .lay {
+      display: grid;
+      grid-template-columns: 216px 1fr;
+      min-height: calc(100vh - 56px)
+    }
+
+    .side {
+      background: #fff;
+      border-right: .5px solid var(--bd);
+      padding: 1.1rem .75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2px
+    }
+
+    .ssec {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--txl);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      padding: .8rem .8rem .3rem
+    }
+
+    .si-btn {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 11px;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--txm);
+      cursor: pointer;
+      transition: .15s;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left
+    }
+
+    .si-btn:hover {
+      background: var(--bg);
+      color: var(--tx)
+    }
+
+    .si-btn.on {
+      background: var(--gl);
+      color: var(--gd)
+    }
+
+    .si-btn i {
+      font-size: 17px;
+      width: 19px;
+      text-align: center;
+      flex-shrink: 0
+    }
+
+    .si-pill {
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 8px;
+      padding: 1px 7px;
+      margin-left: auto
+    }
+
+    .si-pill.red {
+      background: var(--c);
+      color: #fff
+    }
+
+    .si-pill.green {
+      background: var(--g);
+      color: #fff
+    }
+
+    .cnt {
+      padding: 1.8rem;
+      overflow-y: auto;
+      max-height: calc(100vh - 56px)
+    }
+
+    .cnt.msgs-view {
+      padding: 0;
+      overflow: hidden;
+      max-height: calc(100vh - 56px)
+    }
+
+    .fhead {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.1rem;
+      flex-wrap: wrap;
+      gap: .7rem
+    }
+
+    .ftitle {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 1.25rem
+    }
+
+    .chips {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-bottom: 1.1rem
+    }
+
+    .chip {
+      padding: 5px 13px;
+      border-radius: 14px;
+      border: 1px solid var(--bd);
+      font-size: 12.5px;
+      cursor: pointer;
+      background: #fff;
+      color: var(--tx);
+      transition: .2s
+    }
+
+    .chip.on {
+      background: var(--g);
+      color: #fff;
+      border-color: var(--g)
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(244px, 1fr));
+      gap: .9rem
+    }
+
+    .wcard {
+      background: #fff;
+      border-radius: var(--r);
+      border: .5px solid var(--bd);
+      padding: 1.05rem;
+      transition: border-color .2s, box-shadow .2s
+    }
+
+    .wcard:hover {
+      border-color: var(--gm);
+      box-shadow: 0 4px 18px rgba(29, 158, 117, .09)
+    }
+
+    .wch {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: .7rem
+    }
+
+    .wcu {
+      display: flex;
+      align-items: center;
+      gap: 7px
+    }
+
+    .wun {
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.2
+    }
+
+    .wt {
+      font-size: 11px;
+      color: var(--txl)
+    }
+
+    .cat {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 9px;
+      border-radius: 8px;
+      background: var(--al);
+      color: var(--a);
+      white-space: nowrap
+    }
+
+    .wtitle {
+      font-family: 'Syne', sans-serif;
+      font-weight: 600;
+      font-size: .9rem;
+      margin-bottom: .3rem;
+      cursor: pointer;
+      transition: color .15s
+    }
+
+    .wtitle:hover {
+      color: var(--g)
+    }
+
+    .wdesc {
+      font-size: 12.5px;
+      color: var(--txm);
+      line-height: 1.5;
+      margin-bottom: .65rem;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden
+    }
+
+    .wcf {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: .65rem;
+      border-top: .5px solid var(--bd)
+    }
+
+    .price {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: .9rem;
+      color: var(--gd)
+    }
+
+    .psub {
+      font-size: 11px;
+      color: var(--txl);
+      margin-top: 1px
+    }
+
+    .msgbtn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--gl);
+      color: var(--gd);
+      border: none;
+      border-radius: 7px;
+      padding: 6px 11px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: .2s;
+      cursor: pointer
+    }
+
+    .msgbtn:hover {
+      background: var(--g);
+      color: #fff
+    }
+
+    .own {
+      font-size: 11px;
+      color: var(--txl);
+      background: var(--bg);
+      padding: 3px 9px;
+      border-radius: 7px
+    }
+
+    .match-banner {
+      background: linear-gradient(120deg, var(--gd), #1a5f7a);
+      border-radius: var(--r);
+      padding: 1.2rem 1.5rem;
+      margin-bottom: 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      color: #fff
+    }
+
+    .match-banner i {
+      font-size: 32px;
+      opacity: .8;
+      flex-shrink: 0
+    }
+
+    .match-banner h3 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 3px
+    }
+
+    .match-banner p {
+      font-size: 13px;
+      opacity: .75
+    }
+
+    .match-list {
+      display: flex;
+      flex-direction: column;
+      gap: .8rem
+    }
+
+    .mcard {
+      background: #fff;
+      border: .5px solid var(--bd);
+      border-radius: var(--r);
+      padding: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      transition: border-color .2s
+    }
+
+    .mcard:hover {
+      border-color: var(--gm)
+    }
+
+    .mscore {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: var(--gl);
+      border: 2px solid var(--g);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: .85rem;
+      color: var(--gd);
+      flex-shrink: 0;
+      text-align: center;
+      line-height: 1.2
+    }
+
+    .minfo {
+      flex: 1;
+      min-width: 0
+    }
+
+    .mtit {
+      font-weight: 600;
+      font-size: 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
+    .msub {
+      font-size: 12px;
+      color: var(--txm);
+      margin-top: 2px
+    }
+
+    .mreason {
+      font-size: 12px;
+      color: var(--g);
+      margin-top: 4px;
+      display: flex;
+      align-items: flex-start;
+      gap: 4px
+    }
+
+    .dash-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: .8rem;
+      margin-bottom: 1.1rem
+    }
+
+    .dcard {
+      background: #fff;
+      border: .5px solid var(--bd);
+      border-radius: var(--r);
+      padding: 1rem
+    }
+
+    .dnum {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.7rem;
+      line-height: 1;
+      margin-top: .4rem
+    }
+
+    .dlbl {
+      font-size: 12px;
+      color: var(--txm)
+    }
+
+    .dtag {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 7px;
+      display: inline-block;
+      margin-top: 6px
+    }
+
+    .dtag.up {
+      background: var(--gl);
+      color: var(--gd)
+    }
+
+    .dtag.dn {
+      background: var(--cl);
+      color: var(--c)
+    }
+
+    .chart-card {
+      background: #fff;
+      border: .5px solid var(--bd);
+      border-radius: var(--r);
+      padding: 1.2rem
+    }
+
+    .chart-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 600;
+      font-size: .95rem;
+      margin-bottom: 1rem
+    }
+
+    .bar-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      height: 110px
+    }
+
+    .bar-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px
+    }
+
+    .bar {
+      width: 100%;
+      border-radius: 5px 5px 0 0;
+      min-height: 4px;
+      transition: .4s
+    }
+
+    .bar-lbl {
+      font-size: 10px;
+      color: var(--txl);
+      text-align: center
+    }
+
+    .bar-val {
+      font-size: 10px;
+      color: var(--txm);
+      font-weight: 500
+    }
+
+    .ai-insights {
+      background: linear-gradient(135deg, #edfaf4, #e3f1fd);
+      border: 1px solid #aad9c3;
+      border-radius: var(--r);
+      padding: 1.2rem
+    }
+
+    .ai-ins-hd {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: .9rem;
+      color: var(--gd);
+      margin-bottom: .8rem
+    }
+
+    .insight-item {
+      display: flex;
+      gap: 8px;
+      padding: .65rem .9rem;
+      background: rgba(255, 255, 255, .75);
+      border-radius: 8px;
+      margin-bottom: .5rem;
+      font-size: 13.5px;
+      align-items: flex-start;
+      line-height: 1.5
+    }
+
+    .mlayout {
+      display: grid;
+      grid-template-columns: 272px 1fr;
+      height: calc(100vh - 56px);
+      overflow: hidden
+    }
+
+    .mlist {
+      background: #fff;
+      border-right: .5px solid var(--bd);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column
+    }
+
+    .mlh {
+      padding: .95rem 1rem;
+      border-bottom: .5px solid var(--bd);
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: .95rem;
+      position: sticky;
+      top: 0;
+      background: #fff
+    }
+
+    .mi {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 11px 1rem;
+      cursor: pointer;
+      border-bottom: .5px solid var(--bd);
+      transition: .15s
+    }
+
+    .mi:hover {
+      background: var(--bg)
+    }
+
+    .mi.on {
+      background: var(--gl)
+    }
+
+    .min {
+      font-size: 13.5px;
+      font-weight: 500
+    }
+
+    .mip {
+      font-size: 12px;
+      color: var(--txm);
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 155px
+    }
+
+    .miwish {
+      font-size: 11px;
+      color: var(--g);
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 155px
+    }
+
+    .unrd {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--g);
+      margin-left: auto;
+      flex-shrink: 0
+    }
+
+    .chat {
+      display: flex;
+      flex-direction: column;
+      background: var(--bg)
+    }
+
+    .chh {
+      background: #fff;
+      padding: .9rem 1.3rem;
+      border-bottom: .5px solid var(--bd);
+      display: flex;
+      align-items: center;
+      gap: 10px
+    }
+
+    .chname {
+      font-weight: 600;
+      font-size: 15px
+    }
+
+    .chwish {
+      font-size: 12px;
+      color: var(--txm);
+      margin-top: 2px
+    }
+
+    .chscroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 10px
+    }
+
+    .bubble {
+      max-width: 70%;
+      padding: 9px 13px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.5
+    }
+
+    .bubble.me {
+      background: var(--g);
+      color: #fff;
+      margin-left: auto;
+      border-bottom-right-radius: 4px
+    }
+
+    .bubble.them {
+      background: #fff;
+      color: var(--tx);
+      margin-right: auto;
+      border-bottom-left-radius: 4px;
+      border: .5px solid var(--bd)
+    }
+
+    .btime {
+      font-size: 10.5px;
+      margin-top: 4px;
+      opacity: .65;
+      text-align: right
+    }
+
+    .bubble.them .btime {
+      text-align: left
+    }
+
+    .chinput {
+      background: #fff;
+      border-top: .5px solid var(--bd);
+      padding: .6rem .9rem;
+      display: flex;
+      flex-direction: column;
+      gap: 6px
+    }
+
+    .chinput-toolbar {
+      display: flex;
+      gap: 6px;
+      align-items: center
+    }
+
+    .chinput-toolbar input.msgtxt {
+      flex: 1;
+      border-radius: 20px;
+      padding: 9px 14px;
+      border: 1px solid var(--bd);
+      font-size: 14px;
+      outline: none;
+      transition: .2s
+    }
+
+    .chinput-toolbar input.msgtxt:focus {
+      border-color: var(--g)
+    }
+
+    .sbtn {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--g);
+      color: #fff;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: .2s
+    }
+
+    .sbtn:hover {
+      background: var(--gd)
+    }
+
+    .icobtn {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--bg);
+      color: var(--txm);
+      border: 1px solid var(--bd);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: .2s
+    }
+
+    .icobtn:hover {
+      background: var(--gl);
+      color: var(--gd);
+      border-color: var(--gm)
+    }
+
+    .offer-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #fff9ee;
+      border: 1px solid #f0c97a;
+      border-radius: 10px;
+      padding: .55rem .9rem
+    }
+
+    .offer-bar label {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--a);
+      white-space: nowrap;
+      margin: 0
+    }
+
+    .offer-bar .opw {
+      position: relative;
+      flex: 1
+    }
+
+    .offer-bar .opw span {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 13px;
+      color: var(--a);
+      pointer-events: none;
+      font-weight: 600
+    }
+
+    .offer-bar .opw input {
+      width: 100%;
+      padding: 6px 10px 6px 26px;
+      border: 1px solid #f0c97a;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--a);
+      background: #fff;
+      outline: none
+    }
+
+    .offer-bar .cls {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--txm);
+      font-size: 17px;
+      padding: 2px;
+      flex-shrink: 0
+    }
+
+    .img-strip {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: .3rem 0 .1rem
+    }
+
+    .img-thumb {
+      position: relative;
+      width: 58px;
+      height: 58px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--bd);
+      flex-shrink: 0
+    }
+
+    .img-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover
+    }
+
+    .img-thumb .rm {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, .55);
+      color: #fff;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border: none;
+      line-height: 1
+    }
+
+    .bubble-offer {
+      border: 1.5px solid #f0c97a;
+      border-radius: 12px;
+      padding: .75rem 1rem;
+      max-width: 240px;
+      background: #fff9ee
+    }
+
+    .bubble-offer.me {
+      margin-left: auto;
+      border-bottom-right-radius: 4px
+    }
+
+    .bubble-offer.them {
+      margin-right: auto;
+      border-bottom-left-radius: 4px
+    }
+
+    .boffer-lbl {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--a);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      margin-bottom: 3px;
+      display: flex;
+      align-items: center;
+      gap: 4px
+    }
+
+    .boffer-val {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.2rem;
+      color: var(--a)
+    }
+
+    .bubble-img {
+      border-radius: 10px;
+      overflow: hidden;
+      cursor: pointer;
+      max-width: 220px
+    }
+
+    .bubble-img.me {
+      margin-left: auto
+    }
+
+    .bubble-img.them {
+      margin-right: auto
+    }
+
+    .bubble-img img {
+      width: 100%;
+      display: block;
+      border-radius: 10px;
+      border: .5px solid var(--bd)
+    }
+
+    .echat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      color: var(--txl);
+      gap: 10px;
+      text-align: center;
+      padding: 2rem
+    }
+
+    .echat i {
+      font-size: 48px;
+      opacity: .18
+    }
+
+    .phero {
+      background: linear-gradient(135deg, var(--dk), #1a3a2e);
+      border-radius: var(--r);
+      padding: 1.8rem;
+      margin-bottom: 1.1rem;
+      display: flex;
+      align-items: center;
+      gap: 1.3rem
+    }
+
+    .pbav {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.4rem;
+      color: #fff;
+      flex-shrink: 0
+    }
+
+    .pname {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 1.2rem;
+      color: #fff
+    }
+
+    .pemail {
+      font-size: 13px;
+      color: rgba(255, 255, 255, .55);
+      margin-top: 3px
+    }
+
+    .prole {
+      font-size: 11.5px;
+      background: rgba(255, 255, 255, .12);
+      color: rgba(255, 255, 255, .8);
+      padding: 3px 12px;
+      border-radius: 14px;
+      display: inline-block;
+      margin-top: 7px
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: .8rem;
+      margin-bottom: 1.1rem
+    }
+
+    .stat {
+      background: #fff;
+      border-radius: var(--r);
+      border: .5px solid var(--bd);
+      padding: 1rem;
+      text-align: center
+    }
+
+    .snum {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.6rem;
+      color: var(--gd)
+    }
+
+    .slbl {
+      font-size: 12px;
+      color: var(--txm);
+      margin-top: 3px
+    }
+
+    .fcard {
+      background: #fff;
+      border-radius: var(--r);
+      border: .5px solid var(--bd);
+      padding: 1.4rem
+    }
+
+    .fctitle {
+      font-family: 'Syne', sans-serif;
+      font-weight: 600;
+      font-size: .95rem;
+      margin-bottom: 1.1rem
+    }
+
+    .mover {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .45);
+      z-index: 600;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem
+    }
+
+    .mover.on {
+      display: flex
+    }
+
+    .modal {
+      background: #fff;
+      border-radius: 14px;
+      padding: 1.8rem;
+      width: 100%;
+      max-width: 460px;
+      border: .5px solid var(--bd);
+      max-height: 90vh;
+      overflow-y: auto
+    }
+
+    .mhd {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.3rem
+    }
+
+    .mtitle {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: .95rem
+    }
+
+    .xbtn {
+      background: none;
+      border: none;
+      color: var(--txm);
+      font-size: 19px;
+      cursor: pointer;
+      padding: 2px
+    }
+
+    .aipanel {
+      background: linear-gradient(135deg, #edfaf4, #e3f1fd);
+      border: 1px solid #aad9c3;
+      border-radius: 9px;
+      padding: 1rem;
+      margin-bottom: 1rem
+    }
+
+    .aihd {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--gd);
+      margin-bottom: .65rem
+    }
+
+    .aiuse {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: .55rem;
+      background: var(--g);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 5px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: .2s
+    }
+
+    .aiuse:hover {
+      background: var(--gd)
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: var(--dk);
+      color: #fff;
+      padding: 11px 18px;
+      border-radius: 10px;
+      font-size: 14px;
+      z-index: 9999;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: .3s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      max-width: 310px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, .2)
+    }
+
+    .toast.on {
+      transform: translateY(0);
+      opacity: 1
+    }
+
+    .toast.ok i {
+      color: var(--g)
+    }
+
+    .toast.er i {
+      color: var(--c)
+    }
+
+    .empty {
+      text-align: center;
+      padding: 3.5rem 2rem;
+      color: var(--txl);
+      grid-column: 1/-1
+    }
+
+    .empty i {
+      font-size: 50px;
+      opacity: .16;
+      margin-bottom: .8rem;
+      display: block
+    }
+
+    .empty p {
+      font-size: 14px;
+      line-height: 1.6
+    }
+
+    .pricewrap {
+      position: relative
+    }
+
+    .pricewrap span {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--txm);
+      font-size: 14px;
+      pointer-events: none
+    }
+
+    .pricewrap input {
+      padding-left: 32px
+    }
+
+    .loading-full {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: calc(100vh - 56px);
+      gap: 12px;
+      color: var(--txm)
+    }
+
+    .loading-full i {
+      font-size: 36px;
+      color: var(--g)
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    .spin {
+      animation: spin .7s linear infinite
+    }
+
+    @keyframes fi {
+      from {
+        opacity: 0;
+        transform: translateY(6px)
+      }
+
+      to {
+        opacity: 1;
+        transform: none
+      }
+    }
+
+    .fi {
+      animation: fi .22s ease forwards
+    }
+
+    /* Public feed wrapper */
+    .pub-wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.8rem
+    }
+
+    /* ── V2 HERO PÚBLICO ── */
+    .hero-section{background:linear-gradient(135deg,var(--gd) 0%,#0f4a3a 50%,#1a3a2e 100%);padding:2.5rem 1.5rem 2rem;text-align:center;position:relative;overflow:hidden}
+    .hero-logo{font-family:'Syne',sans-serif;font-weight:800;font-size:2rem;color:#fff;letter-spacing:-.5px;margin-bottom:.3rem}
+    .hero-logo em{color:var(--gm);font-style:normal}
+    .hero-tagline{font-size:14px;color:rgba(255,255,255,.7);margin-bottom:1.5rem}
+    .hero-search{position:relative;max-width:480px;margin:0 auto 1.5rem}
+    .hero-search input{width:100%;padding:14px 50px 14px 18px;border-radius:12px;border:none;font-size:15px;outline:none;box-shadow:0 4px 20px rgba(0,0,0,.2);color:var(--tx)}
+    .hero-search button{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:var(--g);color:#fff;border:none;border-radius:8px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px}
+    .hero-search button:hover{background:var(--gd)}
+    .hero-cats{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+    .hero-cat{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:6px 14px;font-size:13px;cursor:pointer;transition:.2s}
+    .hero-cat:hover,.hero-cat.on{background:rgba(255,255,255,.25);border-color:rgba(255,255,255,.5)}
+    /* ── V2 CARDS MARKETPLACE ── */
+    .mkt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.9rem}
+    .mkt-card{background:#fff;border-radius:12px;border:.5px solid var(--bd);overflow:hidden;cursor:pointer;transition:transform .2s,box-shadow .2s;display:flex;flex-direction:column}
+    .mkt-card:hover{transform:translateY(-3px);box-shadow:0 8px 28px rgba(0,0,0,.1);border-color:var(--gm)}
+    .mkt-img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
+    .mkt-placeholder{width:100%;aspect-ratio:4/3;background:linear-gradient(135deg,#f0f0f0,#e8e8e8);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--txl)}
+    .mkt-placeholder i{font-size:32px;opacity:.35}
+    .mkt-placeholder span{font-size:11px;opacity:.6}
+    .mkt-body{padding:.85rem;flex:1;display:flex;flex-direction:column}
+    .mkt-cat{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:7px;background:var(--al);color:var(--a);display:inline-block;margin-bottom:.45rem;white-space:nowrap}
+    .mkt-title{font-family:'Syne',sans-serif;font-weight:700;font-size:.88rem;line-height:1.3;margin-bottom:.35rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .mkt-desc{font-size:12px;color:var(--txm);line-height:1.4;margin-bottom:.5rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;flex:1}
+    .mkt-stats{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--txl);margin-bottom:.5rem;flex-wrap:wrap}
+    .mkt-stat{display:flex;align-items:center;gap:3px}
+    .mkt-footer{display:flex;align-items:center;justify-content:space-between;padding-top:.55rem;border-top:.5px solid var(--bd);margin-top:auto;gap:6px}
+    .mkt-price{font-family:'Syne',sans-serif;font-weight:800;font-size:.95rem;color:var(--gd)}
+    .mkt-cond{font-size:10px;color:var(--txl);margin-top:1px}
+    .mkt-tenho{background:var(--g);color:#fff;border:none;border-radius:7px;padding:6px 10px;font-size:12px;font-weight:500;cursor:pointer;transition:.2s;display:flex;align-items:center;gap:4px;white-space:nowrap;flex-shrink:0}
+    .mkt-tenho:hover{background:var(--gd)}
+    .closed-badge{background:var(--gl);color:var(--gd);font-size:10px;font-weight:600;padding:2px 7px;border-radius:6px;white-space:nowrap}
+    /* ── V2 UPLOAD ── */
+    .upload-zone{border:2px dashed var(--bd);border-radius:10px;padding:1.5rem;text-align:center;cursor:pointer;transition:.2s;background:var(--bg)}
+    .upload-zone:hover,.upload-zone.drag{border-color:var(--g);background:var(--gl)}
+    .upload-zone i{font-size:2rem;color:var(--txl);margin-bottom:.5rem;display:block}
+    .upload-zone p{font-size:13px;color:var(--txm)}
+    .upload-zone .sub{font-size:11px;color:var(--txl);margin-top:3px}
+    .img-previews{display:flex;gap:8px;flex-wrap:wrap;margin-top:.8rem}
+    .img-prev-item{position:relative;width:78px;height:78px;border-radius:8px;overflow:hidden;border:.5px solid var(--bd);flex-shrink:0}
+    .img-prev-item img{width:100%;height:100%;object-fit:cover}
+    .img-prev-item .rm-img{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:11px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center}
+    .img-prev-item .main-badge{position:absolute;bottom:3px;left:3px;background:var(--g);color:#fff;font-size:9px;padding:1px 5px;border-radius:4px;font-weight:600}
+    /* ── V2 PERFIL V2 ── */
+    .prof-page{max-width:520px;margin:0 auto}
+    .prof-hero2{background:linear-gradient(135deg,var(--dk),#1a3a2e);border-radius:16px;padding:1.6rem;margin-bottom:1rem;position:relative}
+    .prof-av-wrap{position:relative;width:80px;height:80px;margin:0 auto 1rem}
+    .prof-av-img{width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,.2);display:block}
+    .prof-av-init{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:1.8rem;color:#fff;border:3px solid rgba(255,255,255,.2)}
+    .prof-info{text-align:center}
+    .prof-name2{font-family:'Syne',sans-serif;font-weight:700;font-size:1.2rem;color:#fff}
+    .prof-email2{font-size:13px;color:rgba(255,255,255,.55);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .prof-role2{font-size:12px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.85);padding:3px 12px;border-radius:14px;display:inline-block;margin-top:8px}
+    .prof-actions{display:flex;gap:8px;margin-top:1.2rem;justify-content:center;flex-wrap:wrap}
+    .prof-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:9px;font-size:13.5px;font-weight:500;cursor:pointer;border:none;transition:.2s}
+    .prof-btn.edit{background:rgba(255,255,255,.14);color:#fff}
+    .prof-btn.edit:hover{background:rgba(255,255,255,.24)}
+    .prof-btn.logout-btn{background:rgba(216,90,48,.22);color:#ffb3a0}
+    .prof-btn.logout-btn:hover{background:rgba(216,90,48,.38)}
+    .prof-back{position:absolute;top:1rem;right:1rem;background:rgba(255,255,255,.1);border:none;color:rgba(255,255,255,.7);width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:17px;transition:.2s}
+    .prof-back:hover{background:rgba(255,255,255,.2);color:#fff}
+    /* ── RESPONSIVO ── */
+    .menu-toggle{display:none;background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:4px;flex-shrink:0}
+    .side-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:149}
+    .side-overlay.on{display:block}
+    @media(max-width:768px){
+      nav{padding:0 .8rem;gap:7px}
+      .logo{font-size:1.1rem}
+      .nsearch{flex:1;max-width:none;margin-left:0}
+      .nsearch input{font-size:12px;padding:6px 10px 6px 30px}
+      .uname{display:none}
+      .upill{padding:3px 6px 3px 3px;gap:5px}
+      .nbtn{padding:5px 9px;font-size:12px}
+      .menu-toggle{display:flex}
+      .lay{grid-template-columns:1fr}
+      .side{position:fixed;top:56px;left:0;bottom:0;width:220px;z-index:150;transform:translateX(-100%);transition:transform .25s ease;box-shadow:4px 0 24px rgba(0,0,0,.18);overflow-y:auto}
+      .side.open{transform:translateX(0)}
+      .cnt{padding:1rem;max-height:none;min-height:calc(100vh - 56px);overflow-y:auto}
+      .cnt.msgs-view{padding:0;height:calc(100vh - 56px)}
+      .mkt-grid{grid-template-columns:repeat(2,1fr);gap:.65rem}
+      .mkt-body{padding:.7rem}
+      .mkt-title{font-size:.82rem}
+      .grid{grid-template-columns:1fr}
+      .fhead{flex-direction:column;align-items:flex-start;gap:.5rem}
+      .fhead>div:last-child{width:100%;justify-content:space-between}
+      .chips{gap:4px}
+      .chip{padding:4px 10px;font-size:12px}
+      .pub-wrap{padding:1rem}
+      .mlayout{grid-template-columns:1fr;height:calc(100vh - 56px);overflow:hidden}
+      .mlist{position:fixed;top:56px;left:0;right:0;bottom:0;z-index:50;background:#fff;display:none;flex-direction:column}
+      .mlist.show{display:flex}
+      .chat{height:calc(100vh - 56px);display:flex;flex-direction:column}
+      .bubble{max-width:85%}
+      .chinput{padding:.5rem .6rem}
+      .chscroll{padding:.8rem}
+      .back-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--bg);border:none;cursor:pointer;color:var(--tx);font-size:18px;flex-shrink:0}
+      .stats{gap:.5rem}
+      .snum{font-size:1.3rem}
+      .fld2{grid-template-columns:1fr}
+      .dash-grid{grid-template-columns:repeat(2,1fr)}
+      .mover{padding:.5rem;align-items:flex-end}
+      .modal{border-radius:14px 14px 0 0;max-height:92vh}
+      .notif-panel{left:8px;right:8px;width:auto}
+      .match-banner{flex-direction:column;gap:.7rem;padding:1rem}
+      .prof-actions{gap:6px}
+      .prof-btn{padding:8px 14px;font-size:13px}
+      .hero-section{padding:1.8rem 1rem 1.4rem}
+      .hero-logo{font-size:1.5rem}
+      .hero-cats{gap:5px}
+      .hero-cat{padding:5px 10px;font-size:12px}
+    }
+    @media(max-width:480px){
+      .mkt-grid{grid-template-columns:repeat(2,1fr);gap:.5rem}
+      .dash-grid{grid-template-columns:1fr 1fr}
+      nav{padding:0 .6rem;gap:5px}
+      .prof-actions{flex-direction:column;align-items:stretch}
+      .prof-btn{justify-content:center}
+    }
+
+    .buy-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:var(--g);background:var(--gl);border:1px solid var(--gm);border-radius:6px;padding:2px 7px;margin-bottom:.45rem;letter-spacing:.01em}
+    .buy-badge i{font-size:10px}
+    .loc-tag{display:flex;align-items:center;gap:3px;font-size:10.5px;color:var(--txl);margin-top:2px}
+    .loc-tag i{font-size:11px;flex-shrink:0}
+  </style>
 </head>
+
 <body>
 
-    <div class="nav-container">
-        <a href="meus_pedidos.html" class="btn-link">📋 Ver Meus<br>Pedidos</a>
-        <button class="btn-sair" onclick="logout()">Sair</button>
+  <div class="toast" id="toast"><i id="ticon" class="ti ti-check"></i><span id="tmsg"></span></div>
+  <div class="notif-panel" id="notifPanel">
+    <div class="np-hd"><span>Notificações</span><span class="np-all" onclick="markAllRead()">Marcar lidas</span></div>
+    <div id="notifList"></div>
+  </div>
+
+  <!-- MSG MODAL -->
+  <div class="mover" id="msgMod">
+    <div class="modal">
+      <div class="mhd"><span class="mtitle" id="modTitle">Contatar comprador</span><button class="xbtn"
+          onclick="closeMsgMod()"><i class="ti ti-x"></i></button></div>
+      <div class="aipanel">
+        <div class="aihd"><i class="ti ti-sparkles"></i>Sugestão da IA</div>
+        <div id="aiTxt" style="font-size:13.5px;color:var(--tx);line-height:1.55"><i class="ti ti-loader spin"
+            style="color:var(--g)"></i> Gerando...</div>
+      </div>
+      <div class="fld"><label>Sua mensagem</label><textarea id="modMsg" rows="4"
+          placeholder="Ou escreva sua própria mensagem..."></textarea></div>
+      <button class="btn g full" onclick="sendModMsg()"><i class="ti ti-send"></i>Enviar mensagem</button>
     </div>
+  </div>
 
-    <div class="card">
-        <h2>O que você deseja comprar?</h2>
-        <p>Preencha os detalhes e os vendedores enviarão propostas para você.</p>
-        
-        <form id="form-pedido">
-            <div class="form-group">
-                <label for="produto">Produto que procura:</label>
-                <input type="text" id="produto" placeholder="Ex: iPhone 13 Pro Max Usado" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="detalhes">Especificações / Detalhes:</label>
-                <textarea id="detalhes" placeholder="Ex: Preciso que tenha bateria acima de 85% e sem riscos na tela." required></textarea>
-            </div>
-            
-            <div class="form-group">
-                <label for="valor">Quanto pretende pagar até (R$):</label>
-                <input type="number" id="valor" placeholder="Ex: 3500" step="0.01">
-            </div>
-            
-            <button type="submit" class="btn-submit">Publicar Pedido</button>
-        </form>
+  <!-- DETAIL MODAL -->
+  <div class="mover" id="detMod">
+    <div class="modal">
+      <div class="mhd"><span class="mtitle">Detalhes do anúncio</span><button class="xbtn"
+          onclick="document.getElementById('detMod').classList.remove('on')"><i class="ti ti-x"></i></button></div>
+      <div id="detContent"></div>
     </div>
+  </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- USER PROFILE MODAL -->
+  <div class="mover" id="userProfileMod">
+    <div class="modal" style="max-width:500px">
+      <div class="mhd"><span class="mtitle">Perfil do usuário</span><button class="xbtn"
+          onclick="document.getElementById('userProfileMod').classList.remove('on')"><i class="ti ti-x"></i></button>
+      </div>
+      <div id="userProfileContent"></div>
+    </div>
+  </div>
 
-    <script>
-        const SUPABASE_URL = "https://pnrhbqtgoikcarkkjhud.supabase.co";
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmhicXRnb2lrY2Fya2tqaHVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk5MzMsImV4cCI6MjA5NjY4NTkzM30._qpYBCfDMWg51pF2MQgi4_FwTW535PW2tpncNFoGXns";
-        
-        const meuSupabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  <!-- AUTH MODAL (sobre o feed público) -->
+  <div class="mover" id="authMod">
+    <div class="modal" style="max-width:420px">
+      <div class="mhd"><span class="mtitle" id="authModTitle">Entrar</span><button class="xbtn"
+          onclick="closeAuthModal()"><i class="ti ti-x"></i></button></div>
+      <div id="authLogin">
+        <div class="fld"><label>E-mail</label><input type="email" id="le" placeholder="seu@email.com"></div>
+        <div class="fld"><label>Senha</label><input type="password" id="lp" placeholder="••••••••"
+            onkeydown="if(event.key==='Enter')login()"></div>
+        <button class="btn g full" id="loginBtn" onclick="login()">Entrar na plataforma</button>
+        <div class="aswitch" style="margin-top:.8rem">Sem conta? <a onclick="showAuthModal('reg')">Criar
+            gratuitamente</a></div>
+      </div>
+      <div id="authReg" style="display:none">
+        <div class="role-tabs">
+          <button class="rtab on" id="tb-buy" onclick="setRole('buyer')"><i class="ti ti-shopping-cart"></i>
+            Comprador</button>
+          <button class="rtab" id="tb-sel" onclick="setRole('seller')"><i class="ti ti-tag"></i> Vendedor</button>
+        </div>
+        <div class="fld"><label>Nome completo</label><input type="text" id="rn" placeholder="Seu nome"></div>
+        <div class="fld"><label>E-mail</label><input type="email" id="re" placeholder="seu@email.com"></div>
+        <div class="fld"><label>Senha</label><input type="password" id="rp" placeholder="Mínimo 6 caracteres"></div>
+        <button class="btn g full" id="regBtn" onclick="register()">Criar conta gratuita</button>
+        <div class="aswitch" style="margin-top:.8rem">Já tem conta? <a onclick="showAuthModal('login')">Faça login</a>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        async function verificarSessao() {
-            const { data: { session }, error } = await meuSupabaseClient.auth.getSession();
-            if (error || !session) {
-                localStorage.clear();
-                window.location.href = "login.html";
+  <!-- NAV -->
+  <nav>
+    <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()"><i class="ti ti-menu-2"></i></button>
+    <a class="logo" href="#" onclick="CU?view('feed'):showPublic();return false">quero<em>comprar</em></a>
+    <div class="nsearch" id="navSearch">
+      <i class="ti ti-search si"></i>
+      <input type="text" placeholder="Buscar produtos..." id="searchInp" oninput="doSearch(this.value)"
+        onfocus="document.getElementById('sdrop').classList.add('on')"
+        onblur="setTimeout(()=>document.getElementById('sdrop').classList.remove('on'),200)">
+      <div class="sdrop" id="sdrop"></div>
+    </div>
+    <div id="navR">
+      <button class="nbtn" onclick="showAuthModal('login')" style="margin-right:6px">Entrar</button>
+      <button class="nbtn p" onclick="showAuthModal('reg')">Criar conta</button>
+    </div>
+  </nav>
+
+  <!-- TELA PÚBLICA (feed sem login) -->
+  <div class="side-overlay" id="sideOverlay" onclick="closeSidebar()"></div>
+
+  <!-- MODAL LOGOUT -->
+  <div class="mover" id="logoutMod">
+    <div class="modal" style="max-width:360px;text-align:center">
+      <div style="font-size:2.5rem;margin-bottom:.8rem">👋</div>
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:.4rem">Sair da conta?</div>
+      <div style="font-size:14px;color:var(--txm);margin-bottom:1.5rem;line-height:1.5">Você será desconectado e precisará fazer login novamente.</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn out full" onclick="document.getElementById('logoutMod').classList.remove('on')"><i class="ti ti-x"></i>Cancelar</button>
+        <button class="btn full" onclick="doLogout()" style="background:var(--c);color:#fff"><i class="ti ti-logout"></i>Confirmar saída</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDITAR PERFIL -->
+  <div class="mover" id="editProfMod">
+    <div class="modal" style="max-width:460px">
+      <div class="mhd">
+        <span class="mtitle">Editar perfil</span>
+        <button class="xbtn" onclick="document.getElementById('editProfMod').classList.remove('on')"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="text-align:center;margin-bottom:1.2rem">
+        <div style="position:relative;display:inline-block">
+          <div id="editAvWrap" style="width:72px;height:72px;border-radius:50%;overflow:hidden;border:3px solid var(--bd);margin:0 auto"></div>
+          <button onclick="document.getElementById('avatarInp').click()" style="position:absolute;bottom:2px;right:2px;width:26px;height:26px;border-radius:50%;background:var(--g);border:2px solid #fff;color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center"><i class="ti ti-camera"></i></button>
+          <input type="file" id="avatarInp" accept="image/*" style="display:none" onchange="previewAvatar(this)">
+        </div>
+        <div style="font-size:12px;color:var(--txl);margin-top:6px">Toque na câmera para alterar a foto</div>
+      </div>
+      <div class="fld"><label>Nome</label><input type="text" id="en" placeholder="Seu nome"></div>
+      <div class="fld"><label>Telefone</label><input type="text" id="ep" placeholder="(11) 99999-9999"></div>
+      <div class="fld"><label>Cidade</label><input type="text" id="ec" placeholder="São Paulo - SP"></div>
+      <div class="fld"><label>Papel na plataforma</label>
+        <select id="erole">
+          <option value="buyer">Comprador</option>
+          <option value="seller">Vendedor</option>
+          <option value="both">Ambos</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn out full" onclick="document.getElementById('editProfMod').classList.remove('on')">Cancelar</button>
+        <button class="btn g full" onclick="saveProf()"><i class="ti ti-check"></i>Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="scr on" id="scr-public">
+    <div class="hero-section">
+      <div class="hero-logo">quero<em>comprar</em></div>
+      <div class="hero-tagline">📢 Anúncios de <strong style="color:#fff">compra</strong> — publique o que você procura e vendedores te contactam</div>
+      <div class="hero-search">
+        <input type="text" id="heroSearch" placeholder="🔍 O que você quer comprar?" oninput="heroSearchFn(this.value)" onkeydown="if(event.key==='Enter')heroSearchFn(this.value)">
+        <button onclick="heroSearchFn(document.getElementById('heroSearch').value)"><i class="ti ti-search"></i></button>
+      </div>
+      <div class="hero-cats">
+        <div class="hero-cat on" data-cat="Todos">🏷️ Todos</div>
+        <div class="hero-cat" data-cat="Eletrônicos">📱 Eletrônicos</div>
+        <div class="hero-cat" data-cat="Veículos">🚗 Veículos</div>
+        <div class="hero-cat" data-cat="Imóveis">🏠 Imóveis</div>
+        <div class="hero-cat" data-cat="Roupas">👕 Roupas</div>
+        <div class="hero-cat" data-cat="Esportes">⚽ Esportes</div>
+        <div class="hero-cat" data-cat="Móveis">🛋️ Móveis</div>
+      </div>
+    </div>
+    <div class="pub-wrap" style="padding-top:1.2rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem;flex-wrap:wrap;gap:.5rem">
+        <div id="pubCount" style="font-size:13px;color:var(--txm)"></div>
+        <div style="display:flex;gap:7px;align-items:center">
+          <select onchange="pubSortMode=this.value;buildPubGrid()" style="font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid var(--bd);background:#fff;outline:none;cursor:pointer">
+            <option value="new">Mais recentes</option>
+            <option value="price">Maior valor</option>
+            <option value="offers">Mais ofertas</option>
+          </select>
+          <button class="btn g sm" onclick="showAuthModal('login')"><i class="ti ti-plus"></i>Publicar</button>
+        </div>
+      </div>
+      <div class="mkt-grid" id="pubGrid"></div>
+    </div>
+  </div>
+    <!-- APP (logado) -->
+  <div class="scr" id="scr-app">
+    <div class="lay">
+      <div class="side" id="sideBar">
+        <div class="ssec">Descobrir</div>
+        <button class="si-btn on" id="sn-feed" onclick="view('feed')"><i class="ti ti-layout-grid"></i>Explorar</button>
+        <button class="si-btn" id="sn-match" onclick="view('match')"><i class="ti ti-sparkles"></i>Match por IA<span
+            class="si-pill green" id="matchpill" style="display:none">✦</span></button>
+        <div class="ssec">Minha conta</div>
+        <button class="si-btn" id="sn-mine" onclick="view('mine')"><i class="ti ti-heart"></i>Meus desejos</button>
+        <button class="si-btn" id="sn-new" onclick="view('new')"><i class="ti ti-plus"></i>Publicar desejo</button>
+        <button class="si-btn" id="sn-msgs" onclick="view('msgs')"><i class="ti ti-message-2"></i>Mensagens<span
+            class="si-pill red" id="msdot" style="display:none">0</span></button>
+        <div class="ssec">Plataforma</div>
+        <button class="si-btn" id="sn-dash" onclick="view('dash')"><i class="ti ti-chart-bar"></i>Analytics</button>
+        <button class="si-btn" id="sn-prof" onclick="view('prof')"><i class="ti ti-user"></i>Perfil</button>
+        <div style="margin-top:auto;padding-top:1rem;border-top:.5px solid var(--bd)">
+          <button class="si-btn" style="color:var(--c)" onclick="askLogout()"><i class="ti ti-logout"></i>Sair</button>
+        </div>
+      </div>
+      <div class="cnt" id="cnt"></div>
+    </div>
+  </div>
+
+  <script>
+    /* ════════════════════════════════════════════════
+       SUPABASE INIT
+    ════════════════════════════════════════════════ */
+    const SUPA_URL = 'https://ylkhhylumtewwxivebez.supabase.co';
+    const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlsa2hoeWx1bXRld3d4aXZlYmV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNzk5OTcsImV4cCI6MjA5NjY1NTk5N30.gNT7RZaETPMMHDLi3nJRKZ7sWxeBCC2-GM0pRF-g4t8';
+    const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+    /* ════════════════════════════════════════════════
+       GLOBALS
+    ════════════════════════════════════════════════ */
+    const COLS = ['#1D9E75', '#BA7517', '#D85A30', '#378ADD', '#639922', '#534AB7', '#D4537E'];
+    const CATS = ['Todos', 'Eletrônicos', 'Veículos', 'Imóveis', 'Roupas', 'Móveis', 'Esportes', 'Livros', 'Outros'];
+    let CU = null;           // { id, email, name, role, city, phone }
+    let CUProfile = null;    // raw profile row
+    let selRole = 'buyer';
+    let activeFilter = 'Todos';
+    let pubFilter = 'Todos';
+    let pubSortMode = 'new';
+    let sortMode = 'new';
+    let activeConv = null;
+    let modWishId = null;
+    let notifOpen = false;
+    let pendingAction = null;
+    let WISHES = [];
+    let CONVS = [];
+    let PROFILES = {};       // uid -> profile cache
+    let pendingImgs = [];
+    let offerOpen = false;
+    let msgChannel = null;
+
+    /* ════════════════════════════════════════════════
+       BOOT
+    ════════════════════════════════════════════════ */
+    window.addEventListener('DOMContentLoaded', async () => {
+      buildPubChips();
+      await loadPublicWishes();
+      // Check existing session
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) {
+        await setSession(session.user);
+      }
+      // Listen for auth changes (login/logout in other tabs)
+      sb.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          await setSession(session.user);
+        } else if (event === 'SIGNED_OUT') {
+          CU = null; CUProfile = null; activeConv = null;
+          CONVS = []; NOTIFS = [];
+          await loadPublicWishes();
+          show('public'); refreshNavPublic();
+        }
+      });
+    });
+
+    async function setSession(user) {
+      // Load profile
+      let { data: prof } = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle();
+      if (!prof) {
+        // Profile not yet created (first login via OAuth etc) — skip
+        return;
+      }
+      CU = { id: user.id, email: user.email, name: prof.name, role: prof.role, city: prof.city || '', phone: prof.phone || '' };
+      CUProfile = prof;
+      PROFILES[CU.id] = CU;
+      enter();
+    }
+
+    /* ════════════════════════════════════════════════
+       AUTH MODAL
+    ════════════════════════════════════════════════ */
+    function showAuthModal(panel) {
+      const isLogin = panel === 'login';
+      document.getElementById('authModTitle').textContent = isLogin ? 'Entrar' : 'Criar conta';
+      document.getElementById('authLogin').style.display = isLogin ? 'block' : 'none';
+      document.getElementById('authReg').style.display = isLogin ? 'none' : 'block';
+      document.getElementById('authMod').classList.add('on');
+    }
+    function closeAuthModal() {
+      document.getElementById('authMod').classList.remove('on');
+      pendingAction = null;
+    }
+    function setRole(r) {
+      selRole = r;
+      document.getElementById('tb-buy').classList.toggle('on', r === 'buyer');
+      document.getElementById('tb-sel').classList.toggle('on', r === 'seller');
+    }
+    function requireLogin(fn) {
+      if (CU) { fn(); return; }
+      pendingAction = fn;
+      showAuthModal('login');
+    }
+
+    async function login() {
+      const email = document.getElementById('le').value.trim();
+      const pass = document.getElementById('lp').value;
+      if (!email || !pass) { toast('Preencha e-mail e senha', 'er'); return; }
+      const btn = document.getElementById('loginBtn');
+      btn.disabled = true; btn.textContent = 'Entrando...';
+      const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+      btn.disabled = false; btn.textContent = 'Entrar na plataforma';
+      if (error) { toast(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos' : error.message, 'er'); return; }
+      await setSession(data.user);
+      closeAuthModal();
+      if (pendingAction) { const fn = pendingAction; pendingAction = null; setTimeout(fn, 400); }
+    }
+
+    async function register() {
+
+      const name = document.getElementById('rn').value.trim();
+      const email = document.getElementById('re').value.trim();
+      const pass = document.getElementById('rp').value;
+
+      if (!name || !email || !pass) {
+        toast('Preencha todos os campos', 'er');
+        return;
+      }
+
+      if (pass.length < 6) {
+        toast('Senha com mínimo 6 caracteres', 'er');
+        return;
+      }
+
+      const btn = document.getElementById('regBtn');
+
+      btn.disabled = true;
+      btn.textContent = 'Criando conta...';
+
+      try {
+
+        const { data, error } = await sb.auth.signUp({
+          email,
+          password: pass,
+          options: {
+            data: {
+              name: name
             }
+          }
+        });
+
+        if (error) throw error;
+
+        if (!data?.user) {
+          throw new Error('Usuário não retornado pelo Supabase');
         }
 
-        async function publicarPedido(event) {
-            event.preventDefault();
-            
-            const produto = document.getElementById('produto').value.trim();
-            const detalhes = document.getElementById('detalhes').value.trim();
-            const valorInput = document.getElementById('valor').value;
-            const valorNumerico = valorInput ? parseFloat(valorInput) : 0.0;
+        const { error: pe } = await sb
+          .from('profiles')
+          .upsert({
+            id: data.user.id,
+            name,
+            role: selRole || 'buyer',
+            phone: '',
+            city: ''
+          });
 
-            try {
-                let userId = null;
-
-                const { data: sessionData } = await meuSupabaseClient.auth.getSession();
-                if (sessionData && sessionData.session && sessionData.session.user) {
-                    userId = sessionData.session.user.id;
-                }
-
-                if (!userId) {
-                    const { data: userData } = await meuSupabaseClient.auth.getUser();
-                    if (userData && userData.user) {
-                        userId = userData.user.id;
-                    }
-                }
-
-                if (!userId) {
-                    alert("Sessão expirada. Por favor, efetue o login novamente.");
-                    localStorage.clear();
-                    window.location.href = "login.html";
-                    return;
-                }
-
-                const { data, error } = await meuSupabaseClient
-                    .from('purchase_requests')
-                    console.log("Tentando salvar com userId:", userId);
-                    .insert([
-                        { 
-                            title: produto, 
-                            description: detalhes, 
-                            price_estimate: valorNumerico,
-                            buyer_id: userId,
-                            
-                        }
-                    ]);
-
-                if (error) throw error;
-
-                alert("Pedido publicado com sucesso!");
-                window.location.href = "meus_pedidos.html"; 
-
-            } catch (error) {
-                console.error('Erro de persistência:', error.message);
-                alert("Erro ao salvar produto: " + error.message);
-            }
+        if (pe) {
+          console.error('Erro ao inserir profile:', pe);
+          throw pe;
         }
 
-        async function logout() {
-            await meuSupabaseClient.auth.signOut();
-            localStorage.clear();
-            window.location.href = "login.html";
-        }
+        await setSession(data.user);
 
-        document.getElementById('form-pedido').addEventListener('submit', publicarPedido);
-        window.onload = verificarSessao;
-    </script>
+        closeAuthModal();
+
+        toast('Conta criada com sucesso!');
+
+      } catch (err) {
+
+        console.error(err);
+
+        toast(err.message, 'er');
+
+      } finally {
+
+        btn.disabled = false;
+        btn.textContent = 'Criar conta gratuita';
+
+      }
+    }
+
+    /* ════════════════════════════════════════════════
+       NAV
+    ════════════════════════════════════════════════ */
+    function refreshNavPublic() {
+      document.getElementById('navR').innerHTML = `
+    <button class="nbtn" onclick="showAuthModal('login')" style="margin-right:6px">Entrar</button>
+    <button class="nbtn p" onclick="showAuthModal('reg')">Criar conta</button>`;
+    }
+    function refreshNavLoggedIn() {
+      const initials = CU.name ? CU.name[0].toUpperCase() : '?';
+      document.getElementById('navR').innerHTML = `
+    <div style="display:flex;align-items:center;gap:9px">
+      <button class="navico" onclick="toggleNotif()" id="notifBtn"><i class="ti ti-bell"></i></button>
+      <div class="upill" onclick="view('prof')">
+        <div class="av" style="background:${colorFor(CU.id)}">${initials}</div>
+        <span class="uname">${CU.name.split(' ')[0]}</span>
+      </div>
+    </div>`;
+    }
+    function colorFor(uid) {
+      if (!uid) return COLS[0];
+      // Use last 6 chars of uuid to get index
+      const n = parseInt(uid.replace(/-/g, '').slice(-4), 16) || 0;
+      return COLS[n % COLS.length];
+    }
+
+    /* ════════════════════════════════════════════════
+       SCREENS
+    ════════════════════════════════════════════════ */
+    function show(s) {
+      document.querySelectorAll('.scr').forEach(x => x.classList.remove('on'));
+      document.getElementById('scr-' + s).classList.add('on');
+    }
+    function showPublic() { show('public'); buildPubGrid(); }
+
+    async function enter() {
+      document.getElementById('matchpill').style.display = 'inline';
+      refreshNavLoggedIn();
+      show('app');
+      await loadWishes();
+      view('feed');
+      loadConvs();
+      subscribeMessages();
+    }
+
+    /* ════════════════════════════════════════════════
+       DATA — WISHES
+    ════════════════════════════════════════════════ */
+    async function loadPublicWishes() {
+      const { data, error } = await sb.from('wishes').select('*').order('created_at', { ascending: false });
+      if (error) { console.error('loadPublicWishes:', error); return; }
+      if (!data || !data.length) { WISHES = []; buildPubGrid(); return; }
+      // Fetch profiles for all unique user_ids
+      const uids = [...new Set(data.map(r => r.user_id))];
+      const { data: profs } = await sb.from('profiles').select('id,name,role,city').in('id', uids);
+      const profMap = {};
+      (profs || []).forEach(p => { profMap[p.id] = p; Object.assign(PROFILES, { [p.id]: p }); });
+      WISHES = data.map(r => mapWish(r, profMap));
+      buildPubGrid();
+    }
+
+    async function loadWishes() {
+      const { data, error } = await sb.from('wishes').select('*').order('created_at', { ascending: false });
+      if (error) { console.error('loadWishes:', error); return; }
+      if (!data || !data.length) { WISHES = []; return; }
+      const uids = [...new Set(data.map(r => r.user_id))];
+      const { data: profs } = await sb.from('profiles').select('id,name,role,city').in('id', uids);
+      const profMap = {};
+      (profs || []).forEach(p => { profMap[p.id] = p; Object.assign(PROFILES, { [p.id]: p }); });
+      WISHES = data.map(r => mapWish(r, profMap));
+    }
+
+    function mapWish(r, profMap) {
+      const prof = (profMap && profMap[r.user_id]) || PROFILES[r.user_id] || {};
+      return {
+        id: r.id, uid: r.user_id,
+        uname: prof.name || '?', urole: prof.role || 'buyer', ucity: prof.city || '',
+        title: r.title, cat: r.category, cond: r.condition,
+        price: Number(r.price), desc: r.description || '',
+        ts: new Date(r.created_at).getTime(),
+        views: r.views || 0, offers: r.offers || 0,
+        closed: r.closed || false,
+        images: r.images || null
+      };
+    }
+
+    /* ════════════════════════════════════════════════
+       PUBLIC FEED
+    ════════════════════════════════════════════════ */
+    function buildPubChips() {
+      const el = document.getElementById('pubChips'); if (!el) return;
+      el.innerHTML = CATS.map(c =>
+        `<div class="chip${c === pubFilter ? ' on' : ''}" onclick="pubFilterCat('${c}')">${c}</div>`
+      ).join('');
+    }
+    function pubFilterCat(c) {
+      pubFilter = c; buildPubGrid();
+      document.querySelectorAll('#pubChips .chip').forEach(x => x.classList.toggle('on', x.textContent === c));
+    }
+    function buildPubGrid() {
+      const g = document.getElementById('pubGrid'); if (!g) return;
+      let ws = pubFilter === 'Todos' ? [...WISHES] : WISHES.filter(w => w.cat === pubFilter);
+      ws = ws.filter(w => !w.closed);
+      if (pubSortMode === 'new') ws.sort((a, b) => b.ts - a.ts);
+      else if (pubSortMode === 'price') ws.sort((a, b) => b.price - a.price);
+      else ws.sort((a, b) => (b.offers || 0) - (a.offers || 0));
+      g.innerHTML = ws.length ? ws.map(pubCardHTML).join('') :
+        '<div class="empty" style="grid-column:1/-1"><i class="ti ti-mood-empty"></i><p>Nenhum desejo publicado ainda.</p></div>';
+    }
+    function pubCardHTML(w) {
+      return `<div class="wcard fi">
+    <div class="wch">
+      <div class="wcu">
+        <div class="av" style="background:${colorFor(w.uid)};width:30px;height:30px;border-radius:50%;font-size:11px;flex-shrink:0;cursor:pointer" onclick="showUserProfile('${w.uid}')">${w.uname[0]}</div>
+        <div><div class="wun" style="cursor:pointer" onclick="showUserProfile('${w.uid}')">${w.uname}</div><div class="wt">${relTime(w.ts)}</div></div>
+      </div>
+      <span class="cat">${w.cat}</span>
+    </div>
+    <div class="wtitle" onclick="showDetail(${w.id})">${w.title}</div>
+    <div class="wdesc">${w.desc}</div>
+    <div class="wcf">
+      <div><div class="price">até R$ ${fmt(w.price)}</div><div class="psub">${w.cond}</div></div>
+      <button class="msgbtn" onclick="requireLogin(()=>openMsgMod(${w.id}))"><i class="ti ti-send" style="font-size:13px"></i>Tenho isso!</button>
+    </div>
+  </div>`;
+    }
+
+    /* ════════════════════════════════════════════════
+       SEARCH
+    ════════════════════════════════════════════════ */
+    function doSearch(q) {
+      const drop = document.getElementById('sdrop');
+      if (!q.trim()) { drop.innerHTML = ''; return; }
+      const res = WISHES.filter(w =>
+        w.title.toLowerCase().includes(q.toLowerCase()) ||
+        w.cat.toLowerCase().includes(q.toLowerCase()) ||
+        w.desc.toLowerCase().includes(q.toLowerCase())
+      ).slice(0, 6);
+      if (!res.length) { drop.innerHTML = '<div style="padding:.9rem;font-size:13px;color:var(--txl);text-align:center">Nenhum resultado</div>'; return; }
+      drop.innerHTML = res.map(w =>
+        `<div class="sitem" onmousedown="showDetail(${w.id})">
+      <div class="av" style="background:${colorFor(w.uid)};border-radius:7px;width:34px;height:34px;font-size:12px;flex-shrink:0">${w.uname[0]}</div>
+      <div><div style="font-size:13.5px;font-weight:500">${w.title}</div>
+      <div style="font-size:12px;color:var(--txm)">${w.cat} · até R$ ${fmt(w.price)}</div></div>
+    </div>`
+      ).join('');
+    }
+
+    /* ════════════════════════════════════════════════
+       NOTIFICATIONS (client-side from conversations)
+    ════════════════════════════════════════════════ */
+    let NOTIFS = [];
+    function toggleNotif() {
+      notifOpen = !notifOpen;
+      document.getElementById('notifPanel').classList.toggle('on', notifOpen);
+      if (notifOpen) buildNotifPanel();
+    }
+    function buildNotifPanel() {
+      const el = document.getElementById('notifList'); if (!el) return;
+      const myN = NOTIFS.filter(n => n.uid === CU.id).sort((a, b) => b.ts - a.ts);
+      if (!myN.length) { el.innerHTML = '<div style="padding:1.5rem;text-align:center;font-size:13px;color:var(--txl)">Nenhuma notificação</div>'; return; }
+      const icons = { msg: 'ti-message-2', offer: 'ti-tag', match: 'ti-sparkles' };
+      const bgs = { msg: 'var(--bl)', offer: 'var(--al)', match: 'var(--gl)' };
+      const fgs = { msg: 'var(--b)', offer: 'var(--a)', match: 'var(--g)' };
+      el.innerHTML = myN.map(n =>
+        `<div class="ni${n.read ? '' : ' unread'}" onclick="clickNotif('${n.id}')">
+      <div class="niico" style="background:${bgs[n.type] || '#eee'};color:${fgs[n.type] || '#666'}"><i class="ti ${icons[n.type] || 'ti-bell'}"></i></div>
+      <div style="flex:1"><div class="nitxt">${n.text}</div><div class="nitime">${relTime(n.ts)}</div></div>
+      ${!n.read ? '<div style="width:7px;height:7px;border-radius:50%;background:var(--g);flex-shrink:0;margin-top:4px"></div>' : ''}
+    </div>`
+      ).join('');
+    }
+    function clickNotif(id) {
+      const n = NOTIFS.find(x => x.id === id); if (!n) return;
+      n.read = true; notifOpen = false;
+      document.getElementById('notifPanel').classList.remove('on');
+      refreshNavLoggedIn();
+      if (n.convId) { activeConv = CONVS.find(c => c.id === n.convId); view('msgs'); }
+    }
+    function markAllRead() { NOTIFS.filter(n => n.uid === CU.id).forEach(n => n.read = true); buildNotifPanel(); }
+    function pushNotif(type, text, convId) {
+      NOTIFS.push({ id: Date.now().toString(), uid: CU.id, type, text, ts: Date.now(), read: false, convId });
+      buildNotifPanel();
+    }
+
+    /* ════════════════════════════════════════════════
+       VIEWS (logged in)
+    ════════════════════════════════════════════════ */
+    function view(vn) {
+      ['feed', 'match', 'mine', 'new', 'msgs', 'dash', 'prof'].forEach(x => {
+        const s = document.getElementById('sn-' + x); if (s) s.classList.remove('on');
+      });
+      const s = document.getElementById('sn-' + vn); if (s) s.classList.add('on');
+      const el = document.getElementById('cnt');
+      el.style.padding = '1.8rem'; el.style.margin = '';
+      el.classList.remove('msgs-view');
+      notifOpen = false; document.getElementById('notifPanel').classList.remove('on');
+      if (vn === 'feed') renderFeed(el);
+      else if (vn === 'match') renderMatch(el);
+      else if (vn === 'mine') renderMine(el);
+      else if (vn === 'new') renderNew(el);
+      else if (vn === 'msgs') { el.classList.add('msgs-view'); el.style.padding = '0'; renderMsgs(el); }
+      else if (vn === 'dash') renderDash(el);
+      else if (vn === 'prof') renderProf(el);
+    }
+
+    /* ── FEED (logado) ── */
+    function renderFeed(el) {
+      el.innerHTML = `<div class="fhead fi">
+    <div class="ftitle">Explorar desejos</div>
+    <div style="display:flex;gap:7px;align-items:center">
+      <select onchange="sortMode=this.value;buildGrid()" style="font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid var(--bd);background:#fff;outline:none;cursor:pointer">
+        <option value="new">Mais recentes</option><option value="price">Maior valor</option><option value="offers">Mais ofertas</option>
+      </select>
+      <button class="btn g sm" onclick="view('new')"><i class="ti ti-plus"></i>Publicar</button>
+    </div>
+  </div>
+  <div class="chips" id="chips">${CATS.map(c => `<div class="chip${c === activeFilter ? ' on' : ''}" onclick="filterCat('${c}')">${c}</div>`).join('')}</div>
+  <div class="grid fi" id="wgrid"></div>`;
+      buildGrid();
+    }
+    function filterCat(c) {
+      activeFilter = c; buildGrid();
+      document.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x.textContent === c));
+    }
+    function buildGrid() {
+      const g = document.getElementById('wgrid'); if (!g) return;
+      let ws = activeFilter === 'Todos' ? [...WISHES] : WISHES.filter(w => w.cat === activeFilter);
+      if (sortMode === 'new') ws.sort((a, b) => b.ts - a.ts);
+      else if (sortMode === 'price') ws.sort((a, b) => b.price - a.price);
+      else ws.sort((a, b) => (b.offers || 0) - (a.offers || 0));
+      g.innerHTML = ws.length ? ws.map(cardHTML).join('') :
+        '<div class="empty"><i class="ti ti-mood-empty"></i><p>Nenhum desejo nessa categoria.</p></div>';
+    }
+    function cardHTML(w) {
+      const mine = CU && w.uid === CU.id;
+      if (w.closed) return `<div class="wcard fi" style="opacity:.55">
+    <div class="wch">
+      <div class="wcu">
+        <div class="av" style="background:${colorFor(w.uid)};width:30px;height:30px;border-radius:50%;font-size:11px;flex-shrink:0;cursor:pointer" onclick="showUserProfile('${w.uid}')">${w.uname[0]}</div>
+        <div><div class="wun">${w.uname}</div><div class="wt">${relTime(w.ts)}</div></div>
+      </div>
+      <span style="font-size:11px;font-weight:600;padding:2px 9px;border-radius:8px;background:var(--gl);color:var(--gd)">✓ Fechado</span>
+    </div>
+    <div class="wtitle" style="text-decoration:line-through;color:var(--txl)">${w.title}</div>
+    <div class="wcf" style="padding-top:.6rem;border-top:.5px solid var(--bd)">
+      <div><div class="price" style="color:var(--txl)">R$ ${fmt(w.price)}</div></div>
+      <span class="own">Negócio fechado</span>
+    </div>
+  </div>`;
+      return `<div class="wcard fi">
+    <div class="wch">
+      <div class="wcu">
+        <div class="av" style="background:${colorFor(w.uid)};width:30px;height:30px;border-radius:50%;font-size:11px;flex-shrink:0;cursor:pointer" onclick="showUserProfile('${w.uid}')">${w.uname[0]}</div>
+        <div><div class="wun" style="cursor:pointer" onclick="showUserProfile('${w.uid}')">${w.uname}</div><div class="wt">${relTime(w.ts)}</div></div>
+      </div>
+      <span class="cat">${w.cat}</span>
+    </div>
+    <div class="wtitle" onclick="showDetail(${w.id})">${w.title}</div>
+    <div class="wdesc">${w.desc}</div>
+    <div class="wcf">
+      <div><div class="price">até R$ ${fmt(w.price)}</div><div class="psub">${w.cond}${w.views ? ' · ' + w.views + ' vistas' : ''}</div></div>
+      ${mine
+          ? `<button class="btn g xs" onclick="confirmCloseDeal(${w.id})"><i class="ti ti-check"></i>Fechar negócio</button>`
+          : `<button class="msgbtn" onclick="openMsgMod(${w.id})"><i class="ti ti-send" style="font-size:13px"></i>Tenho isso!</button>`}
+    </div>
+  </div>`;
+    }
+
+    /* ── MATCH IA ── */
+    async function renderMatch(el) {
+      el.innerHTML = `<div class="match-banner fi"><i class="ti ti-sparkles"></i>
+    <div><h3>Match inteligente por IA</h3><p>A IA analisa todos os desejos e aponta as melhores oportunidades de venda para você.</p></div>
+  </div>
+  <div id="matchArea" style="text-align:center;padding:3rem;color:var(--txm)">
+    <i class="ti ti-loader spin" style="font-size:32px;color:var(--g)"></i>
+    <p style="margin-top:.9rem;font-size:14px">Analisando com IA...</p>
+  </div>`;
+      try {
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514', max_tokens: 1000,
+            system: `Analise desejos de compra e retorne JSON com os 4 melhores para um vendedor. APENAS JSON: {"matches":[{"id":1,"score":92,"reason":"razão curta em pt-BR max 10 palavras"}]}`,
+            messages: [{ role: 'user', content: `Desejos: ${JSON.stringify(WISHES.filter(w => !w.closed && w.uid !== CU.id).map(w => ({ id: w.id, title: w.title, cat: w.cat, price: w.price, cond: w.cond })))}` }]
+          })
+        });
+        const data = await resp.json();
+        let txt = (data.content && data.content[0] && data.content[0].text) || '';
+        txt = txt.replace(/```json|```/g, '').trim();
+        renderMatchCards(JSON.parse(txt).matches);
+      } catch (e) {
+        const fb = WISHES.filter(w => !w.closed && w.uid !== CU.id).sort((a, b) => b.price - a.price).slice(0, 4)
+          .map((w, i) => ({ id: w.id, score: [95, 87, 79, 71][i], reason: 'Alto orçamento com bom potencial' }));
+        renderMatchCards(fb);
+      }
+    }
+    function renderMatchCards(matches) {
+      const el = document.getElementById('matchArea'); if (!el) return;
+      el.innerHTML = `<div class="match-list fi">${matches.map(m => {
+        const w = WISHES.find(x => x.id === m.id); if (!w) return '';
+        const sc = m.score >= 85 ? 'var(--g)' : m.score >= 70 ? 'var(--a)' : 'var(--c)';
+        return `<div class="mcard">
+      <div class="mscore" style="border-color:${sc};color:${sc};background:${sc}18">${m.score}<span style="font-size:9px">%</span></div>
+      <div class="minfo">
+        <div class="mtit">${w.title}</div>
+        <div class="msub">até R$ ${fmt(w.price)} · ${w.cat} · ${w.uname} · ${w.cond}</div>
+        <div class="mreason"><i class="ti ti-sparkles" style="font-size:12px;flex-shrink:0"></i>${m.reason}</div>
+      </div>
+      <button class="btn g sm" onclick="openMsgMod(${w.id})" style="flex-shrink:0">Contatar</button>
+    </div>`;
+      }).join('')}</div>`;
+    }
+
+    /* ── MINE ── */
+    function renderMine(el) {
+      const mine = WISHES.filter(w => w.uid === CU.id).sort((a, b) => b.ts - a.ts);
+      el.innerHTML = `<div class="fhead fi"><div class="ftitle">Meus desejos</div>
+    <button class="btn g sm" onclick="view('new')"><i class="ti ti-plus"></i>Publicar</button></div>
+  <div class="grid fi">${mine.length ? mine.map(mineCard).join('') :
+          '<div class="empty"><i class="ti ti-heart"></i><p>Nenhum desejo publicado ainda.</p></div>'}</div>`;
+    }
+    function mineCard(w) {
+      const convCount = CONVS.filter(c => c.wish_id === w.id).length;
+      return `<div class="wcard fi">
+    <div class="wch">
+      <div><div class="wtitle" onclick="showDetail(${w.id})">${w.title}</div><div class="wt">${relTime(w.ts)}</div></div>
+      <span class="cat">${w.cat}</span>
+    </div>
+    <div class="wdesc">${w.desc}</div>
+    <div class="wcf">
+      <div><div class="price">até R$ ${fmt(w.price)}</div><div class="psub">${w.cond}</div></div>
+      <div style="display:flex;gap:5px;align-items:center">
+        ${convCount ? `<span style="font-size:12px;background:var(--gl);color:var(--gd);padding:3px 9px;border-radius:7px"><i class="ti ti-message-2" style="font-size:11px"></i> ${convCount}</span>` : ''}
+        ${w.closed
+          ? '<span style="font-size:11px;background:var(--gl);color:var(--gd);padding:3px 9px;border-radius:7px;font-weight:600">✓ Fechado</span>'
+          : `<button class="btn g xs" onclick="confirmCloseDeal(${w.id})"><i class="ti ti-check"></i>Fechar</button>`}
+        <button class="btn out xs" onclick="delWish(${w.id})"><i class="ti ti-trash"></i></button>
+      </div>
+    </div>
+  </div>`;
+    }
+    async function delWish(id) {
+      if (!confirm('Remover este anúncio?')) return;
+      const { error } = await sb.from('wishes').delete().eq('id', id).eq('user_id', CU.id);
+      if (error) { toast('Erro ao remover: ' + error.message, 'er'); return; }
+      WISHES = WISHES.filter(w => w.id !== id);
+      toast('Anúncio removido');
+      renderMine(document.getElementById('cnt'));
+    }
+
+    /* ── NEW ── */
+    function renderNew(el) {
+      el.innerHTML = `<div class="ftitle fi" style="margin-bottom:1.2rem">Publicar desejo de compra</div>
+  <div class="fcard fi" style="max-width:560px">
+    <div class="fld"><label>O que você procura?</label><input type="text" id="wt" placeholder="Ex: iPhone 15 Pro Max 256GB"></div>
+    <div class="fld2">
+      <div><label>Categoria</label><select id="wc"><option>Eletrônicos</option><option>Veículos</option><option>Imóveis</option><option>Roupas</option><option>Móveis</option><option>Esportes</option><option>Livros</option><option>Outros</option></select></div>
+      <div><label>Condição</label><select id="wco"><option>Novo</option><option>Seminovo</option><option>Usado</option><option>Qualquer</option></select></div>
+    </div>
+    <div class="fld"><label>Valor máximo</label><div class="pricewrap"><span>R$</span><input type="number" id="wp" placeholder="0" min="0"></div></div>
+    <div class="fld"><label>Descrição</label><textarea id="wd" placeholder="Cor, modelo, requisitos, observações..."></textarea></div>
+    <div style="background:var(--gl);border-radius:8px;padding:.75rem 1rem;font-size:13.5px;color:var(--gd);margin-bottom:1rem;display:flex;gap:7px">
+      <i class="ti ti-bulb" style="flex-shrink:0;margin-top:1px"></i>Quanto mais detalhar, mais ofertas relevantes você recebe.
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn g" id="pubBtn" onclick="publish()"><i class="ti ti-plus"></i>Publicar desejo</button>
+      <button class="btn out" onclick="view('feed')">Cancelar</button>
+    </div>
+  </div>`;
+    }
+    async function publish() {
+      const title = val('wt'), category = val('wc'), condition = val('wco'), price = val('wp'), description = val('wd');
+      if (!title || !price) { toast('Preencha produto e valor máximo', 'er'); return; }
+      const btn = document.getElementById('pubBtn');
+      btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader spin"></i> Publicando...';
+      const { data, error } = await sb.from('wishes').insert({
+        user_id: CU.id, title, category, condition, price: parseFloat(price),
+        description: description || '', views: 0, offers: 0, closed: false
+      }).select('*').single();
+      btn.disabled = false; btn.innerHTML = '<i class="ti ti-plus"></i>Publicar desejo';
+      if (error) { toast('Erro: ' + error.message, 'er'); return; }
+      WISHES.unshift(mapWish(data, { [CU.id]: CU }));
+      toast('Desejo publicado!');
+      view('feed');
+    }
+
+    /* ════════════════════════════════════════════════
+       CONVERSATIONS (Supabase)
+    ════════════════════════════════════════════════ */
+    async function loadConvs() {
+      const { data, error } = await sb.from('conversations')
+        .select('*, wishes(title,price)')
+        .or(`buyer_id.eq.${CU.id},seller_id.eq.${CU.id}`)
+        .order('created_at', { ascending: false });
+      if (error) { console.error('loadConvs:', error); return; }
+      const convs = data || [];
+      // Enrich with profile names
+      const uids = [...new Set(convs.flatMap(c => [c.buyer_id, c.seller_id]))];
+      if (uids.length) {
+        const { data: profs } = await sb.from('profiles').select('id,name').in('id', uids);
+        const pm = {}; (profs || []).forEach(p => pm[p.id] = p);
+        convs.forEach(c => {
+          c.buyer = pm[c.buyer_id] || { name: '?' };
+          c.seller = pm[c.seller_id] || { name: '?' };
+        });
+      }
+      CONVS = convs;
+    }
+
+    function subscribeMessages() {
+      if (msgChannel) sb.removeChannel(msgChannel);
+      msgChannel = sb.channel('messages-' + CU.id)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async payload => {
+          const msg = payload.new;
+          // Find the conversation
+          const conv = CONVS.find(c => c.id === msg.conversation_id);
+          if (!conv) { await loadConvs(); return; }
+          // Append message to active conversation if open
+          if (activeConv && activeConv.id === msg.conversation_id && msg.sender_id !== CU.id) {
+            const senderName = conv.buyer_id === msg.sender_id ? conv.buyer?.name : conv.seller?.name;
+            appendBubble(msg, false);
+            scrollChat();
+          }
+          // Push notification for incoming messages
+          if (msg.sender_id !== CU.id) {
+            const senderConv = CONVS.find(c => c.id === msg.conversation_id);
+            const wTitle = senderConv?.wishes?.title || 'produto';
+            pushNotif('msg', `Nova mensagem sobre "${wTitle.substring(0, 30)}"`, msg.conversation_id);
+          }
+          buildConvList();
+        })
+        .subscribe();
+    }
+
+    /* ── MSGS VIEW ── */
+    async function renderMsgs(el) {
+      el.innerHTML = `<div class="mlayout">
+    <div class="mlist"><div class="mlh">Mensagens</div><div id="mlistin"><div style="padding:1.5rem;text-align:center;color:var(--txl);font-size:13px"><i class="ti ti-loader spin" style="color:var(--g)"></i></div></div></div>
+    <div class="chat" id="chatarea">${ecHTML()}</div>
+  </div>`;
+      await loadConvs();
+      buildConvList();
+      if (activeConv) {
+        const fresh = CONVS.find(c => c.id === activeConv.id);
+        if (fresh) openConv(fresh);
+      }
+    }
+    function buildConvList() {
+      const el = document.getElementById('mlistin'); if (!el) return;
+      if (!CONVS.length) { el.innerHTML = '<p style="padding:1.5rem;font-size:13px;color:var(--txl);text-align:center">Nenhuma conversa ainda</p>'; return; }
+      el.innerHTML = CONVS.map(c => {
+        const isMe = c.buyer_id === CU.id;
+        const other = isMe ? c.seller : c.buyer;
+        const otherName = other?.name || '?';
+        const otherUid = isMe ? c.seller_id : c.buyer_id;
+        const w = c.wishes;
+        const isOn = activeConv && activeConv.id === c.id;
+        return `<div class="mi${isOn ? ' on' : ''}" onclick='openConvById(${c.id})'>
+      <div class="av" style="background:${colorFor(otherUid)};width:36px;height:36px;border-radius:50%;font-size:12.5px;flex-shrink:0">${otherName[0]}</div>
+      <div style="flex:1;min-width:0">
+        <div class="min">${otherName}</div>
+        <div class="mip">${c._lastMsg || '...'}</div>
+        ${w ? `<div class="miwish"><i class="ti ti-tag" style="font-size:10px"></i> ${w.title}</div>` : ''}
+      </div>
+    </div>`;
+      }).join('');
+    }
+    async function openConvById(cid) {
+      const c = CONVS.find(x => x.id === cid); if (!c) return;
+      openConv(c);
+    }
+    async function openConv(c) {
+      activeConv = c; buildConvList();
+      const ca = document.getElementById('chatarea'); if (!ca) return;
+      const isMe = c.buyer_id === CU.id;
+      const other = isMe ? c.seller : c.buyer;
+      const otherName = other?.name || '?';
+      const otherUid = isMe ? c.seller_id : c.buyer_id;
+      const w = c.wishes;
+      ca.innerHTML = `<div class="chh">
+    <div class="av" style="background:${colorFor(otherUid)};width:38px;height:38px;border-radius:50%;font-size:14px;flex-shrink:0;cursor:pointer" onclick="showUserProfile('${otherUid}')">${otherName[0]}</div>
+    <div>
+      <div class="chname">${otherName}</div>
+      ${w ? `<div class="chwish"><i class="ti ti-tag" style="font-size:11px"></i> ${w.title} — até R$ ${fmt(w.price)}</div>` : ''}
+    </div>
+  </div>
+  <div class="chscroll" id="chscroll">
+    <div style="text-align:center;padding:2rem;color:var(--txl)"><i class="ti ti-loader spin" style="color:var(--g)"></i></div>
+  </div>
+  <div class="chinput" id="chinput">
+    <div id="imgStrip" class="img-strip" style="display:none"></div>
+    <div id="offerBar" class="offer-bar" style="display:none">
+      <label><i class="ti ti-tag" style="font-size:13px"></i> Sua oferta</label>
+      <div class="opw"><span>R$</span><input type="number" id="offerVal" placeholder="0" min="0"></div>
+      <button class="cls" onclick="toggleOffer()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="chinput-toolbar">
+      <button class="icobtn" onclick="document.getElementById('fileInp').click()" title="Foto"><i class="ti ti-photo"></i></button>
+      <button class="icobtn" onclick="toggleOffer()" title="Oferta"><i class="ti ti-currency-dollar"></i></button>
+      <input type="file" id="fileInp" accept="image/*" multiple style="display:none" onchange="handleFiles(this.files)">
+      <input class="msgtxt" type="text" id="chin" placeholder="Escreva uma mensagem..." onkeydown="if(event.key==='Enter')sendMsg()">
+      <button class="sbtn" onclick="sendMsg()"><i class="ti ti-send" style="font-size:15px"></i></button>
+    </div>
+  </div>`;
+      // Load messages
+      const { data: msgs } = await sb.from('messages').select('*').eq('conversation_id', c.id).order('created_at', { ascending: true });
+      const sc = document.getElementById('chscroll'); if (!sc) return;
+      sc.innerHTML = (msgs || []).map(m => bubHTML(m)).join('');
+      scrollChat();
+    }
+    function bubHTML(m) {
+      const me = m.sender_id === CU.id;
+      const data = m.data ? (typeof m.data === 'string' ? JSON.parse(m.data) : m.data) : null;
+      if (data && data.type === 'offer') {
+        return `<div class="bubble-offer ${me ? 'me' : 'them'}" style="margin-bottom:2px">
+      <div class="boffer-lbl"><i class="ti ti-tag" style="font-size:12px"></i>Oferta de preço</div>
+      <div class="boffer-val">R$ ${fmt(data.price)}</div>
+      ${m.text && m.text !== '_offer_' ? `<div style="font-size:13px;color:var(--txm);margin-top:5px">${esc(m.text)}</div>` : ''}
+      <div class="btime">${fmtT(m.created_at)}</div>
+    </div>`;
+      }
+      if (data && data.type === 'img') {
+        return `<div class="bubble-img ${me ? 'me' : 'them'}" style="margin-bottom:2px">
+      <img src="${data.src}" alt="Foto" onclick="openImg('${data.src}')">
+      <div class="btime" style="padding:2px 6px;font-size:10px;color:var(--txl)">${fmtT(m.created_at)}</div>
+    </div>`;
+      }
+      return `<div><div class="bubble ${me ? 'me' : 'them'}">${esc(m.text)}<div class="btime">${fmtT(m.created_at)}</div></div></div>`;
+    }
+    function appendBubble(m, scroll = true) {
+      const sc = document.getElementById('chscroll'); if (!sc) return;
+      sc.innerHTML += bubHTML(m);
+      if (scroll) scrollChat();
+    }
+    function ecHTML() { return `<div class="echat"><i class="ti ti-message-2"></i><p style="font-size:14px;font-weight:500">Selecione uma conversa</p><p style="font-size:13px;margin-top:4px">ou use "Tenho isso!" em qualquer anúncio</p></div>`; }
+    function scrollChat() { const s = document.getElementById('chscroll'); if (s) setTimeout(() => { s.scrollTop = s.scrollHeight; }, 50); }
+
+    async function sendMsg() {
+      if (!activeConv) return;
+      const inp = document.getElementById('chin');
+      const text = inp ? inp.value.trim() : '';
+      const offerEl = document.getElementById('offerVal');
+      const price = offerEl ? parseFloat(offerEl.value) : null;
+      const hasOffer = offerOpen && price && price > 0;
+      const hasImgs = pendingImgs.length > 0;
+      if (!text && !hasOffer && !hasImgs) return;
+
+      async function insertMsg(payload) {
+        const { data: msg, error } = await sb.from('messages').insert(payload).select().single();
+        if (error) { toast('Erro ao enviar: ' + error.message, 'er'); return null; }
+        return msg;
+      }
+
+      // Images
+      for (const src of pendingImgs) {
+        const msg = await insertMsg({ conversation_id: activeConv.id, sender_id: CU.id, text: '_img_', data: { type: 'img', src } });
+        if (msg) appendBubble(msg);
+      }
+      pendingImgs = []; renderImgStrip();
+
+      // Offer
+      if (hasOffer) {
+        const msg = await insertMsg({ conversation_id: activeConv.id, sender_id: CU.id, text: text || '_offer_', data: { type: 'offer', price } });
+        if (msg) appendBubble(msg);
+        offerEl.value = ''; offerOpen = false;
+        const ob = document.getElementById('offerBar'); if (ob) ob.style.display = 'none';
+      } else if (text) {
+        const msg = await insertMsg({ conversation_id: activeConv.id, sender_id: CU.id, text });
+        if (msg) appendBubble(msg);
+      }
+      if (inp) inp.value = '';
+      scrollChat();
+      buildConvList();
+    }
+
+    function toggleOffer() {
+      offerOpen = !offerOpen;
+      const bar = document.getElementById('offerBar');
+      if (bar) bar.style.display = offerOpen ? 'flex' : 'none';
+      if (offerOpen) setTimeout(() => { const v = document.getElementById('offerVal'); if (v) v.focus(); }, 50);
+    }
+    function handleFiles(files) {
+      Array.from(files).forEach(f => {
+        const r = new FileReader();
+        r.onload = e => { pendingImgs.push(e.target.result); renderImgStrip(); };
+        r.readAsDataURL(f);
+      });
+      document.getElementById('fileInp').value = '';
+    }
+    function renderImgStrip() {
+      const strip = document.getElementById('imgStrip'); if (!strip) return;
+      if (!pendingImgs.length) { strip.style.display = 'none'; strip.innerHTML = ''; return; }
+      strip.style.display = 'flex';
+      strip.innerHTML = pendingImgs.map((src, i) =>
+        `<div class="img-thumb"><img src="${src}"><button class="rm" onclick="removeImg(${i})"><i class="ti ti-x" style="font-size:9px"></i></button></div>`
+      ).join('');
+    }
+    function removeImg(i) { pendingImgs.splice(i, 1); renderImgStrip(); }
+    function openImg(src) {
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9000;display:flex;align-items:center;justify-content:center;cursor:zoom-out';
+      ov.innerHTML = `<img src="${src}" style="max-width:90vw;max-height:90vh;border-radius:10px">`;
+      ov.onclick = () => document.body.removeChild(ov);
+      document.body.appendChild(ov);
+    }
+
+    /* ── MSG MODAL ── */
+    async function openMsgMod(wid) {
+      if (!CU) { requireLogin(() => openMsgMod(wid)); return; }
+      const w = WISHES.find(x => x.id === wid); if (!w) return;
+      if (w.uid === CU.id) { toast('Este é seu próprio anúncio', 'er'); return; }
+      modWishId = wid;
+      document.getElementById('modTitle').textContent = w.title.length > 40 ? w.title.substring(0, 40) + '...' : w.title;
+      document.getElementById('modMsg').value = '';
+      document.getElementById('aiTxt').innerHTML = '<i class="ti ti-loader spin" style="color:var(--g)"></i> Gerando sugestão...';
+      document.getElementById('msgMod').classList.add('on');
+      // AI suggestion
+      try {
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514', max_tokens: 800,
+            system: `Gere mensagem inicial curta (2-3 frases) persuasiva de vendedor para comprador em pt-BR informal. Retorne APENAS a mensagem.`,
+            messages: [{ role: 'user', content: `Comprador procura: "${w.title}". Categoria: ${w.cat}. Orçamento: R$ ${fmt(w.price)}. Condição: ${w.cond}. Desc: ${w.desc}` }]
+          })
+        });
+        const data = await resp.json();
+        const txt = data.content && data.content[0] && data.content[0].text;
+        if (txt) {
+          document.getElementById('aiTxt').innerHTML = `${esc(txt)}<br>
+        <button class="aiuse" onclick="document.getElementById('modMsg').value=${JSON.stringify(txt)}">
+          <i class="ti ti-check" style="font-size:12px"></i>Usar esta mensagem</button>`;
+        }
+      } catch (e) {
+        document.getElementById('aiTxt').innerHTML = 'Apresente-se e descreva o produto que tem a oferecer.';
+      }
+    }
+    function closeMsgMod() { document.getElementById('msgMod').classList.remove('on'); modWishId = null; }
+    async function sendModMsg() {
+      const text = document.getElementById('modMsg').value.trim();
+      if (!text) { toast('Digite uma mensagem', 'er'); return; }
+      const w = WISHES.find(x => x.id === modWishId); if (!w) return;
+      let { data: existing } = await sb.from('conversations')
+        .select('*, wishes(title,price)')
+        .eq('wish_id', modWishId).eq('seller_id', CU.id).maybeSingle();
+      if (!existing) {
+        const { data: newConv, error } = await sb.from('conversations').insert({
+          wish_id: modWishId, buyer_id: w.uid, seller_id: CU.id
+        }).select('*, wishes(title,price)').single();
+        if (error) { toast('Erro: ' + error.message, 'er'); return; }
+        // Enrich with profiles
+        newConv.buyer = PROFILES[newConv.buyer_id] || { name: w.uname || '?' };
+        newConv.seller = PROFILES[newConv.seller_id] || { name: CU.name };
+        CONVS.unshift(newConv); existing = newConv;
+      } else {
+        existing.buyer = existing.buyer || PROFILES[existing.buyer_id] || { name: '?' };
+        existing.seller = existing.seller || PROFILES[existing.seller_id] || { name: CU.name };
+      }
+      const { error } = await sb.from('messages').insert({ conversation_id: existing.id, sender_id: CU.id, text });
+      if (error) { toast('Erro: ' + error.message, 'er'); return; }
+      await sb.from('wishes').update({ offers: (w.offers || 0) + 1 }).eq('id', modWishId);
+      w.offers = (w.offers || 0) + 1;
+      closeMsgMod(); toast('Mensagem enviada!');
+      activeConv = existing; view('msgs');
+    }
+
+    /* ── DETAIL MODAL ── */
+    function showDetail(wid) {
+      const w = WISHES.find(x => x.id === wid); if (!w) return;
+      const mine = CU && w.uid === CU.id;
+      document.getElementById('detContent').innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem">
+      <div class="av" style="background:${colorFor(w.uid)};width:40px;height:40px;border-radius:50%;font-size:15px;flex-shrink:0;cursor:pointer"
+        onclick="document.getElementById('detMod').classList.remove('on');showUserProfile('${w.uid}')">${w.uname[0]}</div>
+      <div>
+        <div style="font-weight:600;font-size:15px;cursor:pointer"
+          onclick="document.getElementById('detMod').classList.remove('on');showUserProfile('${w.uid}')">${w.uname}</div>
+        <div style="font-size:12px;color:var(--txl)">${w.ucity || 'Localização não informada'} · ${relTime(w.ts)}</div>
+      </div>
+    </div>
+    <div style="margin-bottom:.5rem"><span class="buy-badge"><i class="ti ti-shopping-cart"></i>Quero comprar</span></div>
+    <h2 style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:.5rem">${w.title}</h2>
+    <div style="display:flex;gap:7px;margin-bottom:.5rem;flex-wrap:wrap">
+      <span class="cat">${w.cat}</span>
+      <span style="font-size:11px;background:var(--bg);color:var(--txm);padding:3px 9px;border-radius:8px">${w.cond}</span>
+      ${w.closed ? '<span style="font-size:11px;background:var(--gl);color:var(--gd);padding:3px 9px;border-radius:8px;font-weight:600">\u2713 Fechado</span>' : ''}
+    </div>
+    <p style="font-size:14px;color:var(--txm);line-height:1.65;margin-bottom:1rem">${w.desc}</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1.1rem">
+      <div style="background:var(--gl);border-radius:9px;padding:.9rem;text-align:center">
+        <div style="font-size:11px;color:var(--gd);margin-bottom:3px">Valor máximo</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.25rem;color:var(--gd)">R$ ${fmt(w.price)}</div>
+      </div>
+      <div style="background:var(--bg);border-radius:9px;padding:.9rem;text-align:center">
+        <div style="font-size:11px;color:var(--txm);margin-bottom:3px">Ofertas recebidas</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.25rem">${w.offers || 0}</div>
+      </div>
+    </div>
+    ${w.closed
+          ? '<div style="text-align:center;background:var(--gl);color:var(--gd);padding:.75rem;border-radius:8px;font-weight:600">\u2713 Negócio já fechado</div>'
+          : mine
+            ? `<button class="btn g full" onclick="document.getElementById('detMod').classList.remove('on');confirmCloseDeal(${w.id})">
+            <i class="ti ti-check"></i>Marcar como negócio fechado</button>`
+            : `<button class="btn g full" onclick="document.getElementById('detMod').classList.remove('on');${CU ? `openMsgMod(${w.id})` : `requireLogin(()=>openMsgMod(${w.id}))`}">
+            <i class="ti ti-send"></i>Tenho isso! Contatar comprador</button>`}`;
+      document.getElementById('detMod').classList.add('on');
+    }
+
+    /* ── CLOSE DEAL ── */
+    function confirmCloseDeal(wid) {
+      const w = WISHES.find(x => x.id === wid); if (!w) return;
+      document.getElementById('detContent').innerHTML = `
+    <div style="text-align:center;padding:1rem 0">
+      <div style="font-size:3rem;margin-bottom:.5rem">\uD83C\uDF89</div>
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:.4rem">Fechar negócio</div>
+      <div style="font-size:14px;color:var(--txm);margin-bottom:1.3rem">Confirme que o produto foi vendido/comprado.</div>
+      <div style="background:var(--gl);border-radius:10px;padding:1rem;margin-bottom:1.3rem">
+        <div style="font-weight:600;font-size:15px">${w.title}</div>
+        <div style="font-size:13px;color:var(--txm);margin-top:3px">até R$ ${fmt(w.price)}</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn out full" onclick="document.getElementById('detMod').classList.remove('on')">Cancelar</button>
+        <button class="btn g full" onclick="closeDeal(${w.id})"><i class="ti ti-check"></i>Confirmar fechado</button>
+      </div>
+    </div>`;
+      document.getElementById('detMod').classList.add('on');
+    }
+    async function closeDeal(wid) {
+      const { error } = await sb.from('wishes').update({ closed: true }).eq('id', wid).eq('user_id', CU.id);
+      if (error) { toast('Erro: ' + error.message, 'er'); return; }
+      const w = WISHES.find(x => x.id === wid); if (w) w.closed = true;
+      toast('Negócio fechado! Parabéns! \uD83C\uDF89');
+      document.getElementById('detMod').classList.remove('on');
+      buildGrid(); buildPubGrid();
+      if (document.getElementById('sn-mine')?.classList.contains('on')) renderMine(document.getElementById('cnt'));
+    }
+
+    /* ── USER PROFILE MODAL ── */
+    async function showUserProfile(uid) {
+      document.getElementById('userProfileContent').innerHTML =
+        '<div style="text-align:center;padding:2rem"><i class="ti ti-loader spin" style="color:var(--g);font-size:24px"></i></div>';
+      document.getElementById('userProfileMod').classList.add('on');
+      const { data: prof, error } = await sb
+        .from('profiles')
+        .select('*')
+        .eq('id', uid)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Erro ao buscar perfil:', error);
+
+        document.getElementById('userProfileContent').innerHTML =
+          '<p style="text-align:center;color:red;padding:1.5rem">Erro ao carregar perfil</p>';
+
+        return;
+      }
+
+      if (!prof) {
+
+        document.getElementById('userProfileContent').innerHTML =
+          '<p style="text-align:center;color:var(--txl);padding:1.5rem">Perfil não encontrado</p>';
+
+        return;
+
+      }
+
+      const isBuyer = prof.role === 'buyer' || prof.role === 'both';
+      const isSeller = prof.role === 'seller' || prof.role === 'both';
+      const userWishes = WISHES.filter(w => w.uid === uid);
+      const open = userWishes.filter(w => !w.closed);
+      const closed = userWishes.filter(w => w.closed);
+      const sellerConvs = CONVS.filter(c => c.seller_id === uid);
+      let content = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:1.3rem">
+      <div class="av" style="background:${colorFor(uid)};width:52px;height:52px;border-radius:50%;font-size:1.2rem;flex-shrink:0">${prof.name[0]}</div>
+      <div>
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem">${prof.name}</div>
+        <div style="font-size:13px;color:var(--txl);margin-top:2px">${prof.city || 'Localização não informada'}</div>
+        <div style="font-size:11px;margin-top:5px;display:inline-block;padding:2px 10px;border-radius:12px;background:var(--gl);color:var(--gd)">
+          ${isBuyer && isSeller ? 'Comprador & Vendedor' : isBuyer ? 'Comprador' : 'Vendedor'}</div>
+      </div>
+    </div>`;
+      if (isBuyer && open.length) {
+        content += `<div style="font-family:'Syne',sans-serif;font-weight:700;font-size:.9rem;margin-bottom:.7rem;display:flex;align-items:center;gap:6px">
+      <i class="ti ti-heart" style="color:var(--c)"></i>Deseja comprar (${open.length})</div>
+      <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem">
+        ${open.map(w => `
+          <div style="border:.5px solid var(--bd);border-radius:9px;padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:.8rem;cursor:pointer"
+            onclick="document.getElementById('userProfileMod').classList.remove('on');showDetail(${w.id})">
+            <div>
+              <div style="font-weight:600;font-size:14px">${w.title}</div>
+              <div style="font-size:12px;color:var(--txm);margin-top:2px">${w.cat} · ${w.cond}</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-family:'Syne',sans-serif;font-weight:700;color:var(--gd);font-size:.9rem">R$ ${fmt(w.price)}</div>
+              <div style="font-size:11px;color:var(--txl)">${w.offers || 0} ofertas</div>
+            </div>
+          </div>`).join('')}
+      </div>`;
+      }
+      if (isSeller && sellerConvs.length) {
+        content += `<div style="font-family:'Syne',sans-serif;font-weight:700;font-size:.9rem;margin-bottom:.7rem;display:flex;align-items:center;gap:6px">
+      <i class="ti ti-tag" style="color:var(--g)"></i>Ofertas enviadas (${sellerConvs.length})</div>
+      <div style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem">
+        ${sellerConvs.map(c => {
+          const w = c.wishes; return w ? `
+          <div style="border:.5px solid var(--bd);border-radius:9px;padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between">
+            <div style="font-weight:600;font-size:14px">${w.title}</div>
+            <span style="font-size:11px;background:var(--gl);color:var(--gd);padding:2px 8px;border-radius:7px">Ofertado</span>
+          </div>`: '';
+        }).join('')}
+      </div>`;
+      }
+      if (closed.length) {
+        content += `<div style="font-family:'Syne',sans-serif;font-weight:700;font-size:.9rem;margin-bottom:.7rem;display:flex;align-items:center;gap:6px">
+      <i class="ti ti-check" style="color:var(--gd)"></i>Negócios fechados (${closed.length})</div>
+      <div style="display:flex;flex-direction:column;gap:.5rem">
+        ${closed.map(w => `
+          <div style="border:.5px solid #b5ddc8;background:var(--gl);border-radius:9px;padding:.7rem 1rem;display:flex;justify-content:space-between">
+            <div style="font-weight:600;font-size:13.5px">${w.title}</div>
+            <span style="font-size:11px;color:var(--gd);font-weight:600">\u2713 Fechado</span>
+          </div>`).join('')}
+      </div>`;
+      }
+      if (!open.length && !sellerConvs.length && !closed.length) {
+        content += '<p style="font-size:13px;color:var(--txl);text-align:center;padding:.5rem 0">Nenhuma atividade ainda.</p>';
+      }
+      document.getElementById('userProfileContent').innerHTML = content;
+    }
+
+    /* ── ANALYTICS ── */
+    async function renderDash(el) {
+      await loadWishes();
+      const myW = WISHES.filter(w => w.uid === CU.id);
+      const tv = myW.length, to = myW.reduce((a, w) => a + (w.offers || 0), 0);
+      const catC = {}; WISHES.forEach(w => { catC[w.cat] = (catC[w.cat] || 0) + 1; });
+      const topC = Object.entries(catC).sort((a, b) => b[1] - a[1]).slice(0, 5);
+      const maxC = Math.max(...topC.map(x => x[1]), 1);
+      const pr = [{ l: '<500', n: 0 }, { l: '500-1k', n: 0 }, { l: '1k-3k', n: 0 }, { l: '3k-6k', n: 0 }, { l: '>6k', n: 0 }];
+      WISHES.forEach(w => { if (w.price < 500) pr[0].n++; else if (w.price < 1000) pr[1].n++; else if (w.price < 3000) pr[2].n++; else if (w.price < 6000) pr[3].n++; else pr[4].n++; });
+      const maxP = Math.max(...pr.map(x => x.n), 1);
+      el.innerHTML = `<div class="ftitle fi" style="margin-bottom:1.1rem">Analytics da plataforma</div>
+  <div class="dash-grid fi">
+    <div class="dcard"><div class="dlbl">Total de desejos</div><div class="dnum">${WISHES.length}</div><div class="dtag up">ativos</div></div>
+    <div class="dcard"><div class="dlbl">Meus anúncios</div><div class="dnum">${tv}</div><div class="dtag up">${myW.filter(w => !w.closed).length} abertos</div></div>
+    <div class="dcard"><div class="dlbl">Ofertas recebidas</div><div class="dnum">${to}</div><div class="dtag ${to > 0 ? 'up' : 'dn'}">${to > 0 ? 'ativas' : 'nenhuma'}</div></div>
+    <div class="dcard"><div class="dlbl">Fechados</div><div class="dnum">${myW.filter(w => w.closed).length}</div><div class="dtag up">negócios</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-bottom:.8rem">
+    <div class="chart-card fi"><div class="chart-title">Desejos por categoria</div>
+      <div class="bar-chart">${topC.map(([cat, n]) => `<div class="bar-col"><div class="bar-val">${n}</div><div class="bar" style="height:${Math.round((n / maxC) * 95)}px;background:var(--g)"></div><div class="bar-lbl">${cat.substring(0, 6)}</div></div>`).join('')}</div>
+    </div>
+    <div class="chart-card fi"><div class="chart-title">Distribuição de orçamentos</div>
+      <div class="bar-chart">${pr.map(r => `<div class="bar-col"><div class="bar-val">${r.n}</div><div class="bar" style="height:${Math.round((r.n / maxP) * 95)}px;background:var(--b)"></div><div class="bar-lbl">${r.l}</div></div>`).join('')}</div>
+    </div>
+  </div>
+  <div class="ai-insights fi" id="aiIns">
+    <div class="ai-ins-hd" id="insHd"><i class="ti ti-sparkles"></i>Insights da IA
+      <i class="ti ti-loader spin" style="font-size:13px;margin-left:auto;color:var(--g)"></i></div>
+    <div id="insItems"><p style="font-size:13px;color:var(--txm)">Analisando...</p></div>
+  </div>`;
+      fetchInsights(topC, tv, to);
+    }
+    async function fetchInsights(topC, tv, to) {
+      try {
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514', max_tokens: 800,
+            system: `Analista de marketplace. Gere 3 insights práticos em pt-BR. APENAS JSON: {"insights":[{"icon":"ti-trending-up","text":"insight"}]}. Ícones: ti-trending-up, ti-bulb, ti-target, ti-star, ti-users.`,
+            messages: [{ role: 'user', content: `${WISHES.length} desejos, categorias: ${topC.map(([c, n]) => c + ':' + n).join(',')}, ${tv} meus, ${to} ofertas.` }]
+          })
+        });
+        const data = await resp.json();
+        let txt = (data.content && data.content[0] && data.content[0].text) || '';
+        txt = txt.replace(/```json|```/g, '').trim();
+        const { insights } = JSON.parse(txt);
+        document.getElementById('insHd').innerHTML = '<i class="ti ti-sparkles"></i>Insights da IA';
+        document.getElementById('insItems').innerHTML = insights.map(ins =>
+          `<div class="insight-item"><i class="ti ${ins.icon}" style="color:var(--g);flex-shrink:0;margin-top:2px"></i><span>${ins.text}</span></div>`
+        ).join('');
+      } catch (e) {
+        document.getElementById('insHd').innerHTML = '<i class="ti ti-sparkles"></i>Insights';
+        document.getElementById('insItems').innerHTML = `
+      <div class="insight-item"><i class="ti ti-trending-up" style="color:var(--g);flex-shrink:0"></i><span>Eletrônicos lidera com mais desejos e maiores orçamentos — alta oportunidade.</span></div>
+      <div class="insight-item"><i class="ti ti-target" style="color:var(--b);flex-shrink:0"></i><span>Anúncios detalhados recebem em média 3x mais contatos de vendedores.</span></div>
+      <div class="insight-item"><i class="ti ti-bulb" style="color:var(--a);flex-shrink:0"></i><span>Faixa R$ 1k–3k concentra mais orçamentos — ideal para seminovos.</span></div>`;
+      }
+    }
+
+    /* ── PROFILE ── */
+    function renderProf(el) {
+      const myW = WISHES.filter(w => w.uid === CU.id).length;
+      const convs = CONVS.filter(c => c.buyer_id === CU.id || c.seller_id === CU.id).length;
+      const roleLabel = { buyer: 'Comprador', seller: 'Vendedor', both: 'Comprador & Vendedor' };
+      el.innerHTML = `
+  <div class="phero fi">
+    <div class="pbav" style="background:${colorFor(CU.id)}">${CU.name[0]}</div>
+    <div>
+      <div class="pname">${CU.name}</div>
+      <div class="pemail">${CU.email}</div>
+      <div class="prole">${roleLabel[CU.role] || 'Usuário'}</div>
+    </div>
+  </div>
+  <div class="stats fi">
+    <div class="stat"><div class="snum">${myW}</div><div class="slbl">Desejos publicados</div></div>
+    <div class="stat"><div class="snum">${convs}</div><div class="slbl">Conversas</div></div>
+    <div class="stat"><div class="snum">${WISHES.filter(w => w.uid === CU.id && w.closed).length}</div><div class="slbl">Negócios fechados</div></div>
+  </div>
+  <div class="fcard fi" style="max-width:510px">
+    <div class="fctitle">Editar perfil</div>
+    <div class="fld"><label>Nome</label><input type="text" id="en" value="${CU.name}"></div>
+    <div class="fld2">
+      <div><label>Telefone</label><input type="text" id="ep" value="${CU.phone || ''}" placeholder="(11) 99999-9999"></div>
+      <div><label>Cidade</label><input type="text" id="ec" value="${CU.city || ''}" placeholder="São Paulo"></div>
+    </div>
+    <div class="fld"><label>Papel na plataforma</label>
+      <select id="erole">
+        <option value="buyer" ${CU.role === 'buyer' ? 'selected' : ''}>Comprador</option>
+        <option value="seller" ${CU.role === 'seller' ? 'selected' : ''}>Vendedor</option>
+        <option value="both" ${CU.role === 'both' ? 'selected' : ''}>Ambos</option>
+      </select>
+    </div>
+    <button class="btn g" onclick="saveProf()"><i class="ti ti-check"></i>Salvar alterações</button>
+  </div>`;
+    }
+    async function saveProf() {
+      const name = val('en'), phone = val('ep'), city = val('ec'), role = document.getElementById('erole').value;
+      const { error } = await sb.from('profiles').update({ name, phone, city, role }).eq('id', CU.id);
+      if (error) { toast('Erro: ' + error.message, 'er'); return; }
+      CU.name = name; CU.phone = phone; CU.city = city; CU.role = role;
+      toast('Perfil atualizado!'); renderProf(document.getElementById('cnt')); refreshNavLoggedIn();
+    }
+
+    /* ════════════════ UTILS ════════════════ */
+    function val(id) { const e = document.getElementById(id); return e ? e.value.trim() : ''; }
+    function fmt(n) { return Number(n).toLocaleString('pt-BR'); }
+    function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+    function fmtT(ts) {
+      const d = new Date(ts);
+      return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+    function relTime(ts) {
+      const d = Date.now() - (typeof ts === 'number' ? ts : new Date(ts).getTime());
+      if (d < 60000) return 'agora';
+      if (d < 3600000) return Math.floor(d / 60000) + 'min atrás';
+      if (d < 86400000) return Math.floor(d / 3600000) + 'h atrás';
+      return Math.floor(d / 86400000) + 'd atrás';
+    }
+    function toast(msg, type = 'ok') {
+      const t = document.getElementById('toast');
+      document.getElementById('tmsg').textContent = msg;
+      document.getElementById('ticon').className = 'ti ' + (type === 'ok' ? 'ti-check' : 'ti-alert-circle');
+      t.className = 'toast on ' + type;
+      setTimeout(() => t.classList.remove('on'), 3000);
+    }
+    document.addEventListener('click', e => {
+      if (notifOpen && !e.target.closest('#notifPanel') && !e.target.closest('#notifBtn')) {
+        notifOpen = false; document.getElementById('notifPanel').classList.remove('on');
+      }
+    });
+
+    /* ════════════ V2: CARDS + IMAGENS ════════════ */
+    function mktPlaceholder(cat) {
+      const icons = {'Eletrônicos':'ti-device-laptop','Veículos':'ti-car','Imóveis':'ti-home','Roupas':'ti-shirt','Móveis':'ti-armchair','Esportes':'ti-ball-football','Livros':'ti-book'};
+      const ico = icons[cat] || 'ti-tag';
+      return '<div class="mkt-placeholder"><i class="ti ' + ico + '"></i><span>' + (cat||'') + '</span></div>';
+    }
+    function mktImgHTML(w) {
+      if (w.images && w.images.length > 0) {
+        var none = 'none';
+        return '<img class="mkt-img" src="' + w.images[0] + '" loading="lazy" alt="" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block">';
+      }
+      return mktPlaceholder(w.cat);
+    }
+
+    /* ════════════ V2: HERO PÚBLICO ════════════ */
+    let _heroSearch = '';
+    function heroSearchFn(q) {
+      _heroSearch = q.trim().toLowerCase();
+      buildPubGrid();
+    }
+    function heroFilter(cat) {
+      pubFilter = cat;
+      document.querySelectorAll('.hero-cat').forEach(el => {
+        el.classList.toggle('on', el.dataset.cat === cat);
+      });
+      _heroSearch = '';
+      const inp = document.getElementById('heroSearch');
+      if (inp) inp.value = '';
+      buildPubGrid();
+    }
+    // Bind hero cat clicks after DOM ready
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('.hero-cat').forEach(el => {
+        el.onclick = () => heroFilter(el.dataset.cat);
+      });
+    });
+
+    /* ════════════ V2: buildPubGrid atualizado ════════════ */
+    const _origBuildPubGrid = window.buildPubGrid;
+    window.buildPubGrid = function() {
+      const g = document.getElementById('pubGrid'); if (!g) return;
+      let ws = [...WISHES].filter(w => !w.closed);
+      if (pubFilter && pubFilter !== 'Todos') ws = ws.filter(w => w.cat === pubFilter);
+      if (_heroSearch) ws = ws.filter(w =>
+        w.title.toLowerCase().includes(_heroSearch) ||
+        w.desc.toLowerCase().includes(_heroSearch) ||
+        w.cat.toLowerCase().includes(_heroSearch)
+      );
+      if (pubSortMode === 'price') ws.sort((a,b) => b.price - a.price);
+      else if (pubSortMode === 'offers') ws.sort((a,b) => (b.offers||0) - (a.offers||0));
+      else ws.sort((a,b) => b.ts - a.ts);
+      const cnt = document.getElementById('pubCount');
+      if (cnt) cnt.textContent = ws.length + ' desejo' + (ws.length !== 1 ? 's' : '') + ' encontrado' + (ws.length !== 1 ? 's' : '');
+      g.innerHTML = ws.length
+        ? ws.map(pubCardHTML).join('')
+        : '<div class="empty" style="grid-column:1/-1"><i class="ti ti-mood-empty"></i><p>Nenhum desejo encontrado</p></div>';
+    };
+
+    /* ════════════ V2: pubCardHTML marketplace ════════════ */
+    const _origPubCardHTML = window.pubCardHTML;
+    window.pubCardHTML = function(w) {
+      var loc = w.ucity ? '<div class="loc-tag"><i class="ti ti-map-pin"></i>' + esc(w.ucity) + '</div>' : '';
+      return '<div class="mkt-card fi" onclick="showDetail(' + w.id + ')">' +
+        mktImgHTML(w) +
+        '<div class="mkt-body">' +
+          '<div style="display:flex;align-items:center;gap:5px;margin-bottom:.4rem;flex-wrap:wrap">' +
+            '<span class="buy-badge"><i class="ti ti-shopping-cart"></i>Quero comprar</span>' +
+            '<span class="mkt-cat">' + esc(w.cat) + '</span>' +
+          '</div>' +
+          '<div class="mkt-title">' + esc(w.title) + '</div>' +
+          '<div class="mkt-desc">' + esc(w.desc) + '</div>' +
+          '<div class="mkt-stats">' +
+            '<span class="mkt-stat"><i class="ti ti-eye" style="font-size:12px"></i>' + (w.views||0) + '</span>' +
+            '<span class="mkt-stat"><i class="ti ti-message-2" style="font-size:12px"></i>' + (w.offers||0) + '</span>' +
+            '<span class="mkt-stat"><i class="ti ti-clock" style="font-size:12px"></i>' + relTime(w.ts) + '</span>' +
+          '</div>' +
+          loc +
+          '<div class="mkt-footer">' +
+            '<div><div class="mkt-price">até R$ ' + fmt(w.price) + '</div><div class="mkt-cond">' + esc(w.cond) + '</div></div>' +
+            '<button class="mkt-tenho" onclick="event.stopPropagation();requireLogin(function(){openMsgMod(' + w.id + ')})">' +
+              '<i class="ti ti-send" style="font-size:12px"></i>Tenho!' +
+            '</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    };
+
+    /* ════════════ V2: cardHTML marketplace (feed logado) ════════════ */
+    const _origCardHTML = window.cardHTML;
+    window.cardHTML = function(w) {
+      const mine = CU && w.uid === CU.id;
+      if (w.closed) return '<div class="mkt-card fi" style="opacity:.55" onclick="showDetail(' + w.id + ')">' +
+        mktImgHTML(w) +
+        '<div class="mkt-body">' +
+          '<span class="mkt-cat">' + esc(w.cat) + '</span>' +
+          '<div class="mkt-title" style="text-decoration:line-through;color:var(--txl)">' + esc(w.title) + '</div>' +
+          '<div class="mkt-footer" style="margin-top:auto"><div class="mkt-price" style="color:var(--txl)">R$ ' + fmt(w.price) + '</div>' +
+          '<span class="closed-badge">✓ Fechado</span></div>' +
+        '</div></div>';
+      var loc2 = w.ucity ? '<div class="loc-tag"><i class="ti ti-map-pin"></i>' + esc(w.ucity) + '</div>' : '';
+      return '<div class="mkt-card fi" onclick="showDetail(' + w.id + ')">' +
+        mktImgHTML(w) +
+        '<div class="mkt-body">' +
+          '<div style="display:flex;align-items:center;gap:5px;margin-bottom:.4rem;flex-wrap:wrap">' +
+            '<span class="buy-badge"><i class="ti ti-shopping-cart"></i>Quero comprar</span>' +
+            '<span class="mkt-cat">' + esc(w.cat) + '</span>' +
+          '</div>' +
+          '<div class="mkt-title">' + esc(w.title) + '</div>' +
+          '<div class="mkt-desc">' + esc(w.desc) + '</div>' +
+          '<div class="mkt-stats">' +
+            '<span class="mkt-stat"><i class="ti ti-eye" style="font-size:12px"></i>' + (w.views||0) + '</span>' +
+            '<span class="mkt-stat"><i class="ti ti-message-2" style="font-size:12px"></i>' + (w.offers||0) + '</span>' +
+            '<span class="mkt-stat"><i class="ti ti-user" style="font-size:12px"></i>' + esc(w.uname.split(' ')[0]) + '</span>' +
+          '</div>' +
+          loc2 +
+          '<div class="mkt-footer">' +
+            '<div><div class="mkt-price">até R$ ' + fmt(w.price) + '</div><div class="mkt-cond">' + esc(w.cond) + '</div></div>' +
+            (mine
+              ? '<button class="mkt-tenho" style="background:var(--a)" onclick="event.stopPropagation();confirmCloseDeal(' + w.id + ')"><i class="ti ti-check" style="font-size:12px"></i>Fechar</button>'
+              : '<button class="mkt-tenho" onclick="event.stopPropagation();openMsgMod(' + w.id + ')"><i class="ti ti-send" style="font-size:12px"></i>Tenho!</button>') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    };
+
+    /* ════════════ V2: buildGrid usa mkt-grid ════════════ */
+    const _origBuildGrid = window.buildGrid;
+    window.buildGrid = function() {
+      const g = document.getElementById('wgrid'); if (!g) return;
+      // Troca classe para mkt-grid
+      g.className = 'mkt-grid fi';
+      _origBuildGrid();
+    };
+
+    /* ════════════ V2: renderNew com upload de fotos ════════════ */
+    let _wishImages = [];
+    const _origRenderNew = window.renderNew;
+    window.renderNew = function(el) {
+      _wishImages = [];
+      el.innerHTML = '';
+      var wrap = document.createElement('div');
+      wrap.innerHTML = [
+        '<div class="fi" style="margin-bottom:1.2rem;display:flex;align-items:center;gap:.7rem;flex-wrap:wrap">',
+          '<div class="ftitle">Publicar desejo de compra</div>',
+          '<span class="buy-badge" style="font-size:11px;padding:3px 10px"><i class="ti ti-shopping-cart"></i>Você está anunciando um DESEJO DE COMPRA</span>',
+        '</div>',
+        '<div class="fcard fi" style="max-width:580px">',
+          '<div class="fld"><label>O que você procura?</label>',
+            '<input type="text" id="wt" placeholder="Ex: iPhone 15 Pro Max 256GB"></div>',
+          '<div class="fld2">',
+            '<div><label>Categoria</label><select id="wc">',
+              '<option>Eletrônicos</option><option>Veículos</option><option>Imóveis</option>',
+              '<option>Roupas</option><option>Móveis</option><option>Esportes</option>',
+              '<option>Livros</option><option>Outros</option>',
+            '</select></div>',
+            '<div><label>Condição aceita</label><select id="wco">',
+              '<option>Novo</option><option>Seminovo</option><option>Usado</option><option>Qualquer</option>',
+            '</select></div>',
+          '</div>',
+          '<div class="fld"><label>Valor máximo</label>',
+            '<div class="pricewrap"><span>R$</span><input type="number" id="wp" placeholder="0" min="0"></div></div>',
+          '<div class="fld"><label>Descrição</label>',
+            '<textarea id="wd" rows="3" placeholder="Cor, capacidade, versão, estado mínimo..."></textarea></div>',
+          '<div class="fld">',
+            '<label>Fotos de referência <span style="font-weight:400;color:var(--txl)">(opcional — até 4)</span></label>',
+            '<div class="upload-zone" id="uploadZone">',
+              '<i class="ti ti-photo-plus"></i>',
+              '<p>Toque para adicionar fotos</p>',
+              '<div class="sub">JPG, PNG · máx 4 fotos · 2MB cada</div>',
+            '</div>',
+            '<input type="file" id="wishImgInp" accept="image/*" multiple style="display:none">',
+            '<div class="img-previews" id="wishImgPreviews"></div>',
+          '</div>',
+          '<div style="background:var(--gl);border-radius:8px;padding:.7rem 1rem;font-size:13px;color:var(--gd);margin-bottom:1rem;display:flex;gap:7px">',
+            '<i class="ti ti-bulb" style="flex-shrink:0;margin-top:1px"></i>Quanto mais detalhar, mais rápido recebe ofertas!',
+          '</div>',
+          '<div style="display:flex;gap:8px">',
+            '<button class="btn g" id="pubBtn"><i class="ti ti-plus"></i>Publicar desejo</button>',
+            '<button class="btn out" id="cancelPubBtn">Cancelar</button>',
+          '</div>',
+        '</div>'
+      ].join('');
+      el.appendChild(wrap);
+      // Bind events safely
+      el.querySelector('#uploadZone').onclick = function(){ el.querySelector('#wishImgInp').click(); };
+      el.querySelector('#uploadZone').ondragover = function(e){ e.preventDefault(); this.classList.add('drag'); };
+      el.querySelector('#uploadZone').ondragleave = function(){ this.classList.remove('drag'); };
+      el.querySelector('#uploadZone').ondrop = function(e){ e.preventDefault(); this.classList.remove('drag'); handleWishFiles(e.dataTransfer.files); };
+      el.querySelector('#wishImgInp').onchange = function(){ handleWishFiles(this.files); };
+      el.querySelector('#pubBtn').onclick = publish;
+      el.querySelector('#cancelPubBtn').onclick = function(){ view('feed'); };
+    };
+    function handleWishFiles(files) {
+      const arr = Array.from(files);
+      const remaining = 4 - _wishImages.length;
+      if (remaining <= 0) { toast('Máximo de 4 fotos atingido','er'); return; }
+      arr.slice(0, remaining).forEach(f => {
+        if (f.size > 2*1024*1024) { toast('Foto grande demais (máx 2MB)','er'); return; }
+        const r = new FileReader();
+        r.onload = e => { _wishImages.push(e.target.result); renderWishPreviews(); };
+        r.readAsDataURL(f);
+      });
+      document.getElementById('wishImgInp').value = '';
+    }
+    function renderWishPreviews() {
+      const wrap = document.getElementById('wishImgPreviews'); if (!wrap) return;
+      wrap.innerHTML = _wishImages.map((src,i) =>
+        '<div class="img-prev-item">' +
+          '<img src="' + src + '" alt="Foto ' + (i+1) + '">' +
+          (i===0 ? '<div class="main-badge">Principal</div>' : '') +
+          '<button class="rm-img" onclick="removeWishImg(' + i + ')"><i class="ti ti-x" style="font-size:9px"></i></button>' +
+        '</div>'
+      ).join('');
+      const zone = document.getElementById('uploadZone');
+      if (zone) zone.style.display = _wishImages.length >= 4 ? 'none' : '';
+    }
+    function removeWishImg(i) {
+      _wishImages.splice(i,1); renderWishPreviews();
+      const zone = document.getElementById('uploadZone');
+      if (zone) zone.style.display = '';
+    }
+
+    /* ════════════ V2: publish com imagens ════════════ */
+    const _origPublish = window.publish;
+    window.publish = async function() {
+      const title=val('wt'), category=val('wc'), condition=val('wco'), price=val('wp'), description=val('wd');
+      if (!title||!price) { toast('Preencha produto e valor máximo','er'); return; }
+      const btn = document.getElementById('pubBtn');
+      btn.disabled=true; btn.innerHTML='<i class="ti ti-loader spin"></i> Publicando...';
+      let imageUrls = [];
+      if (_wishImages.length > 0) {
+        btn.innerHTML='<i class="ti ti-loader spin"></i> Enviando fotos...';
+        for (let i=0;i<_wishImages.length;i++) {
+          try {
+            const res=await fetch(_wishImages[i]);
+            const blob=await res.blob();
+            const ext=blob.type.split('/')[1]||'jpg';
+            const path='wishes/'+CU.id+'/'+Date.now()+'_'+i+'.'+ext;
+            const {error:upErr}=await sb.storage.from('wish-images').upload(path,blob,{contentType:blob.type,upsert:true});
+            if (upErr) { imageUrls.push(_wishImages[i]); }
+            else { const {data:ud}=sb.storage.from('wish-images').getPublicUrl(path); imageUrls.push(ud.publicUrl); }
+          } catch(e) { imageUrls.push(_wishImages[i]); }
+        }
+      }
+      const {data,error}=await sb.from('wishes').insert({
+        user_id:CU.id, title, category, condition, price:parseFloat(price),
+        description:description||'', views:0, offers:0, closed:false,
+        images:imageUrls.length>0?imageUrls:null
+      }).select('*').single();
+      btn.disabled=false; btn.innerHTML='<i class="ti ti-plus"></i>Publicar desejo';
+      if (error){toast('Erro: '+error.message,'er');return;}
+      _wishImages=[];
+      WISHES.unshift(mapWish(data,{[CU.id]:CU}));
+      buildPubGrid(); toast('Desejo publicado! 🎉'); view('feed');
+    };
+
+    /* ════════════ V2: renderDash com tiles de ícone ════════════ */
+    const _origRenderDash = window.renderDash;
+    window.renderDash = async function(el) {
+      await loadWishes();
+      const myW=WISHES.filter(w=>w.uid===CU.id);
+      const active=myW.filter(w=>!w.closed).length;
+      const convs=CONVS.length;
+      const views=myW.reduce((a,w)=>a+(w.views||0),0);
+      const offers=myW.reduce((a,w)=>a+(w.offers||0),0);
+      const catC={};WISHES.forEach(w=>{catC[w.cat]=(catC[w.cat]||0)+1;});
+      const topC=Object.entries(catC).sort((a,b)=>b[1]-a[1]).slice(0,5);
+      const maxC=Math.max(...topC.map(x=>x[1]),1);
+      const pr=[{l:'<500',n:0},{l:'500-1k',n:0},{l:'1k-3k',n:0},{l:'3k+',n:0}];
+      WISHES.forEach(w=>{if(w.price<500)pr[0].n++;else if(w.price<1000)pr[1].n++;else if(w.price<3000)pr[2].n++;else pr[3].n++;});
+      const maxP=Math.max(...pr.map(x=>x.n),1);
+      el.innerHTML=
+        '<div class="ftitle fi" style="margin-bottom:1rem">Analytics da plataforma</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.8rem;margin-bottom:1rem">' +
+          dashTile('ti-heart','Desejos ativos',active,'var(--c)','var(--cl)')+
+          dashTile('ti-message-2','Conversas',convs,'var(--b)','var(--bl)')+
+          dashTile('ti-eye','Visualizações',views,'var(--g)','var(--gl)')+
+          dashTile('ti-currency-dollar','Ofertas recebidas',offers,'var(--a)','var(--al)')+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-bottom:.8rem">'+
+          '<div class="chart-card fi"><div class="chart-title">Desejos por categoria</div>'+
+            '<div class="bar-chart">'+topC.map(([cat,n])=>'<div class="bar-col"><div class="bar-val">'+n+'</div><div class="bar" style="height:'+Math.round((n/maxC)*95)+'px;background:var(--g)"></div><div class="bar-lbl">'+cat.substring(0,6)+'</div></div>').join('')+'</div></div>'+
+          '<div class="chart-card fi"><div class="chart-title">Distribuição de orçamentos</div>'+
+            '<div class="bar-chart">'+pr.map(r=>'<div class="bar-col"><div class="bar-val">'+r.n+'</div><div class="bar" style="height:'+Math.round((r.n/maxP)*95)+'px;background:var(--b)"></div><div class="bar-lbl">'+r.l+'</div></div>').join('')+'</div></div>'+
+        '</div>'+
+        '<div class="ai-insights fi" id="aiIns">'+
+          '<div class="ai-ins-hd" id="insHd"><i class="ti ti-sparkles"></i>Insights da IA <i class="ti ti-loader spin" style="font-size:13px;margin-left:auto;color:var(--g)"></i></div>'+
+          '<div id="insItems"><p style="font-size:13px;color:var(--txm)">Analisando...</p></div>'+
+        '</div>';
+      fetchInsights(topC,active,offers);
+    };
+    function dashTile(icon,label,value,color,bg) {
+      return '<div class="dcard" style="text-align:center;padding:1.1rem .8rem">'+
+        '<div style="width:44px;height:44px;border-radius:12px;background:'+bg+';display:flex;align-items:center;justify-content:center;margin:0 auto .7rem">'+
+          '<i class="ti '+icon+'" style="font-size:22px;color:'+color+'"></i>'+
+        '</div>'+
+        '<div style="font-family:Syne,sans-serif;font-weight:800;font-size:1.7rem;line-height:1;color:'+color+'">'+value+'</div>'+
+        '<div style="font-size:12px;color:var(--txm);margin-top:5px">'+label+'</div>'+
+      '</div>';
+    }
+
+    /* ════════════ V2: renderProf novo ════════════ */
+    function avatarHTML(size) {
+      size=size||80;
+      var s=size+'px',fs=Math.round(size*.38)+'px';
+      if(CU&&CU.avatar) return '<img class="prof-av-img" src="'+CU.avatar+'" style="width:'+s+';height:'+s+'" alt="Foto">';
+      var init=(CU&&CU.name)?CU.name[0].toUpperCase():'?';
+      var bg=CU?colorFor(CU.id):'#1D9E75';
+      return '<div class="prof-av-init" style="background:'+bg+';width:'+s+';height:'+s+';font-size:'+fs+'">'+init+'</div>';
+    }
+    const _origRenderProf = window.renderProf;
+    window.renderProf = function(el) {
+      var myW=WISHES.filter(function(w){return w.uid===CU.id;}).length;
+      var convs=CONVS.filter(function(c){return c.buyer_id===CU.id||c.seller_id===CU.id;}).length;
+      var closed=WISHES.filter(function(w){return w.uid===CU.id&&w.closed;}).length;
+      var roleLabel={buyer:'Comprador',seller:'Vendedor',both:'Comprador & Vendedor'};
+      var myWishes=WISHES.filter(function(w){return w.uid===CU.id;}).slice(0,5);
+      var wishItems=myWishes.map(function(w){
+        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem .9rem;background:var(--bg);border-radius:9px;gap:.7rem;cursor:pointer" data-wid="'+w.id+'">'+
+          '<div style="min-width:0"><div style="font-weight:500;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(w.title)+'</div>'+
+          '<div style="font-size:12px;color:var(--txm);margin-top:2px">'+w.cat+' · '+w.cond+'</div></div>'+
+          '<div style="text-align:right;flex-shrink:0"><div style="font-family:Syne,sans-serif;font-weight:700;color:var(--gd);font-size:.9rem">R$ '+fmt(w.price)+'</div>'+
+          (w.closed?'<span style="font-size:11px;color:var(--gd)">✓ Fechado</span>':'')+'</div></div>';
+      }).join('');
+      var wishSection=myWishes.length?
+        '<div class="fcard fi" style="margin-top:.2rem">'+
+          '<div class="fctitle" style="margin-bottom:.8rem"><i class="ti ti-heart" style="color:var(--c);margin-right:5px"></i>Meus desejos</div>'+
+          '<div id="profWishList" style="display:flex;flex-direction:column;gap:.5rem">'+wishItems+'</div>'+
+          (myW>5?'<div style="text-align:center;margin-top:.7rem"><button class="btn out sm" id="viewAllBtn">Ver todos ('+myW+')</button></div>':'')+
+        '</div>':'';
+      el.innerHTML=
+        '<div class="prof-page fi">'+
+          '<div class="prof-hero2">'+
+            '<button class="prof-back" id="profBackBtn" title="Fechar"><i class="ti ti-x"></i></button>'+
+            '<div class="prof-av-wrap" style="margin:0 auto 1rem">'+avatarHTML(80)+'</div>'+
+            '<div class="prof-info">'+
+              '<div class="prof-name2">'+esc(CU.name)+'</div>'+
+              '<div class="prof-email2">'+esc(CU.email)+'</div>'+
+              '<div class="prof-role2">'+(roleLabel[CU.role]||'Usuário')+'</div>'+
+            '</div>'+
+            '<div class="prof-actions">'+
+              '<button class="prof-btn edit" id="editProfBtn"><i class="ti ti-pencil"></i>Editar perfil</button>'+
+              '<button class="prof-btn logout-btn" id="logoutProfBtn"><i class="ti ti-logout"></i>Sair da conta</button>'+
+            '</div>'+
+          '</div>'+
+          '<div class="stats fi">'+
+            '<div class="stat"><div class="snum">'+myW+'</div><div class="slbl">Desejos publicados</div></div>'+
+            '<div class="stat"><div class="snum">'+convs+'</div><div class="slbl">Conversas</div></div>'+
+            '<div class="stat"><div class="snum">'+closed+'</div><div class="slbl">Negócios fechados</div></div>'+
+          '</div>'+
+          wishSection+
+        '</div>';
+      var back=el.querySelector('#profBackBtn');
+      if(back) back.onclick=function(){view('feed');};
+      var editBtn=el.querySelector('#editProfBtn');
+      if(editBtn) editBtn.onclick=openEditProf;
+      var logBtn=el.querySelector('#logoutProfBtn');
+      if(logBtn) logBtn.onclick=askLogout;
+      var viewAll=el.querySelector('#viewAllBtn');
+      if(viewAll) viewAll.onclick=function(){view('mine');};
+      el.querySelectorAll('[data-wid]').forEach(function(item){
+        item.onclick=function(){showDetail(parseInt(item.dataset.wid));};
+      });
+    };
+
+    /* ════════════ LOGOUT + PERFIL EDIT ════════════ */
+    function askLogout() { document.getElementById('logoutMod').classList.add('on'); }
+    async function doLogout() {
+      document.getElementById('logoutMod').classList.remove('on');
+      try {
+        if(typeof msgChannel!=='undefined'&&msgChannel){sb.removeChannel(msgChannel);msgChannel=null;}
+        await sb.auth.signOut();
+      } catch(e){console.error(e);}
+      finally {
+        CU=null;CUProfile=null;activeConv=null;CONVS=[];NOTIFS=[];
+        await loadPublicWishes();
+        show('public'); refreshNavPublic(); closeSidebar();
+        toast('Você saiu da conta. Até logo!');
+      }
+    }
+    function openEditProf() {
+      var en=document.getElementById('en'),ep=document.getElementById('ep'),
+          ec=document.getElementById('ec'),sel=document.getElementById('erole');
+      if(en) en.value=CU.name||'';
+      if(ep) ep.value=CU.phone||'';
+      if(ec) ec.value=CU.city||'';
+      if(sel) sel.value=CU.role||'buyer';
+      var wrap=document.getElementById('editAvWrap');
+      if(wrap){
+        var bg=colorFor(CU.id),init=CU.name[0].toUpperCase();
+        wrap.innerHTML=CU.avatar
+          ?'<img src="'+CU.avatar+'" style="width:72px;height:72px;object-fit:cover;border-radius:50%">'
+          :'<div style="width:72px;height:72px;border-radius:50%;background:'+bg+';display:flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-weight:800;font-size:1.6rem;color:#fff">'+init+'</div>';
+      }
+      document.getElementById('editProfMod').classList.add('on');
+    }
+    var _newAvatarB64=null;
+    function previewAvatar(inp) {
+      var file=inp.files[0];if(!file)return;
+      var reader=new FileReader();
+      reader.onload=function(e){
+        _newAvatarB64=e.target.result;
+        var wrap=document.getElementById('editAvWrap');
+        if(wrap) wrap.innerHTML='<img src="'+_newAvatarB64+'" style="width:72px;height:72px;object-fit:cover;border-radius:50%">';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    /* ════════════ SIDEBAR MOBILE ════════════ */
+    function isMobile(){return window.innerWidth<=768;}
+    function toggleSidebar(){
+      var s=document.getElementById('sideBar');
+      s&&s.classList.contains('open')?closeSidebar():openSidebar();
+    }
+    function openSidebar(){
+      var s=document.getElementById('sideBar'),o=document.getElementById('sideOverlay');
+      if(s)s.classList.add('open');if(o)o.classList.add('on');
+    }
+    function closeSidebar(){
+      var s=document.getElementById('sideBar'),o=document.getElementById('sideOverlay');
+      if(s)s.classList.remove('open');if(o)o.classList.remove('on');
+    }
+    function updateMenuToggle(){
+      var t=document.getElementById('menuToggle');if(!t)return;
+      t.style.display=document.getElementById('scr-app')?.classList.contains('on')?'':'none';
+    }
+    document.addEventListener('click',function(e){
+      if(isMobile()&&e.target.closest('.si-btn')&&document.getElementById('sideBar')?.classList.contains('open'))
+        setTimeout(closeSidebar,150);
+    });
+    function mobileShowList(){
+      if(!isMobile())return;
+      var ml=document.querySelector('.mlist'),ch=document.querySelector('.chat');
+      if(ml)ml.classList.add('show');if(ch)ch.style.display='none';
+    }
+    function mobileShowChat(){
+      if(!isMobile())return;
+      var ml=document.querySelector('.mlist'),ch=document.querySelector('.chat');
+      if(ml)ml.classList.remove('show');if(ch)ch.style.display='flex';
+    }
+    function addBackBtn(){
+      if(!isMobile())return;
+      var chh=document.querySelector('.chh');
+      if(!chh||chh.querySelector('.back-btn'))return;
+      var btn=document.createElement('button');
+      btn.className='back-btn';btn.innerHTML='<i class="ti ti-arrow-left"></i>';
+      btn.onclick=mobileShowList;chh.insertBefore(btn,chh.firstChild);
+    }
+    var _origView=window.view;
+    window.view=function(vn){
+      _origView(vn);
+      if(vn==='msgs'&&isMobile())setTimeout(mobileShowList,60);
+      updateMenuToggle();
+    };
+    var _origOpenConv=window.openConv;
+    if(_origOpenConv) window.openConv=async function(c){await _origOpenConv(c);mobileShowChat();addBackBtn();};
+    var _origOpenConvById=window.openConvById;
+    if(_origOpenConvById) window.openConvById=async function(cid){await _origOpenConvById(cid);mobileShowChat();addBackBtn();};
+    var _origShow=window.show;
+    window.show=function(s){_origShow(s);updateMenuToggle();if(isMobile())closeSidebar();};
+    var _origEnter=window.enter;
+    window.enter=async function(){await _origEnter();updateMenuToggle();};
+    window.addEventListener('resize',function(){
+      if(!isMobile()){
+        closeSidebar();
+        var ml=document.querySelector('.mlist'),ch=document.querySelector('.chat');
+        if(ml)ml.classList.remove('show');if(ch)ch.style.display='';
+      }
+    });
+    updateMenuToggle();
+
+  </script>
 </body>
+
 </html>
