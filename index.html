@@ -2039,7 +2039,7 @@
     /* ════════════════════════════════════════════════
        SUPABASE INIT
     ════════════════════════════════════════════════ */
-    const SUPA_URL = 'https://pnrhbqtgoikcarkkjhud.supabase.c';
+    const SUPA_URL = 'https://pnrhbqtgoikcarkkjhud.supabase.co';
     const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmhicXRnb2lrY2Fya2tqaHVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDk5MzMsImV4cCI6MjA5NjY4NTkzM30._qpYBCfDMWg51pF2MQgi4_FwTW535PW2tpncNFoGXns';
     const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 
@@ -2062,6 +2062,7 @@
     let WISHES = [];
     let CONVS = [];
     let PROFILES = {};       // uid -> profile cache
+    let SELLER_ITEMS = {};   // uid -> [{id, wish_id, title, price, status, ts}]
     let pendingImgs = [];
     let offerOpen = false;
     let msgChannel = null;
@@ -2290,6 +2291,9 @@
 
     function mapWish(r, profMap) {
       const prof = (profMap && profMap[r.user_id]) || PROFILES[r.user_id] || {};
+      // Suporte a imagens: array images (jsonb) ou featured_image (text)
+      let imgs = r.images || null;
+      if (!imgs && r.featured_image) imgs = [r.featured_image];
       return {
         id: r.id, uid: r.user_id,
         uname: prof.name || '?', urole: prof.role || 'buyer', ucity: prof.city || '',
@@ -2298,7 +2302,7 @@
         ts: new Date(r.created_at).getTime(),
         views: r.views || 0, offers: r.offers || 0,
         closed: r.closed || false,
-        images: r.images || null
+        images: imgs
       };
     }
 
@@ -2624,6 +2628,12 @@
         });
       }
       CONVS = convs;
+      // Carregar itens de venda do usuário (tabela seller_offers)
+      try {
+        const { data: offers } = await sb.from('seller_offers')
+          .select('*').eq('seller_id', CU.id).order('created_at', { ascending: false });
+        if (offers && offers.length) SELLER_ITEMS[CU.id] = offers;
+      } catch(e) { console.log('seller_offers:', e.message); }
     }
 
     function subscribeMessages() {
@@ -2879,7 +2889,23 @@
       if (error) { toast('Erro: ' + error.message, 'er'); return; }
       await sb.from('wishes').update({ offers: (w.offers || 0) + 1 }).eq('id', modWishId);
       w.offers = (w.offers || 0) + 1;
-      closeMsgMod(); toast('Mensagem enviada!');
+      // Registrar como item de venda na tabela seller_offers (primeira vez)
+      const jaOfertou = CONVS.some(c => c.wish_id === modWishId && c.seller_id === CU.id && c.id !== existing.id);
+      if (!jaOfertou) {
+        try {
+          const { data: newOffer } = await sb.from('seller_offers').insert({
+            seller_id: CU.id,
+            price: w.price,
+            description: text,
+            status: 'active'
+          }).select('*').single();
+          if (newOffer) {
+            if (!SELLER_ITEMS[CU.id]) SELLER_ITEMS[CU.id] = [];
+            SELLER_ITEMS[CU.id].unshift({ ...newOffer, wish_title: w.title, wish_cat: w.cat });
+          }
+        } catch(e) { console.log('seller_offers insert:', e.message); }
+      }
+      closeMsgMod(); toast('Oferta enviada! O comprador será notificado. ✓');
       activeConv = existing; view('msgs');
     }
 
